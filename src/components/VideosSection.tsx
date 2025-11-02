@@ -10,21 +10,21 @@ type Video = {
 const VIDEOS: Video[] = [
   {
     id: "v1",
-    title: "Sustainable Travel Tips",
+    title: "Welcome to the city of Angels",
     youtubeId: "vzlS4P-R-rk", // replace with real ids
-    description: "Angeles Pampanga",
+    description: "Welcome to Angeles City Pampanga",
   },
   {
     id: "v2",
-    title: "Protecting Coastal Ecosystems",
+    title: "Discover Pampanga",
     youtubeId: "howgEFee5MU",
-    description: "How communities protect shorelines and wildlife.",
+    description: "Mekeni tana! (Tara na dito!)",
   },
   {
     id: "v3",
-    title: "Eco-Friendly Camping",
+    title: "Best of Kapampangan Cuisine",
     youtubeId: "avqseTGOCOA",
-    description: "Leave no trace principles and practical tips.",
+    description: "Explore the Culinary Capital of the Philippines",
   },
 ];
 
