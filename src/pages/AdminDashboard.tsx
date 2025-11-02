@@ -270,8 +270,6 @@ const AdminDashboard = () => {
                 <Card className="shadow-eco"><CardContent className="p-6 text-center"><Users className="w-8 h-8 text-blue-600 mx-auto mb-2" /><div className="text-3xl font-bold text-blue-600 mb-2">{totalUsers}</div><div className="text-sm text-muted-foreground">Total Users</div></CardContent></Card>
                 <Card className="shadow-eco"><CardContent className="p-6 text-center"><MapPin className="w-8 h-8 text-green-600 mx-auto mb-2" /><div className="text-3xl font-bold text-green-600 mb-2">{totalDestinations}</div><div className="text-sm text-muted-foreground">Destinations</div></CardContent></Card>
                 <Card className="shadow-eco"><CardContent className="p-6 text-center"><TrendingUp className="w-8 h-8 text-amber-600 mx-auto mb-2" /><div className="text-3xl font-bold text-amber-600 mb-2">{stats.totalPosts || 0}</div><div className="text-sm text-muted-foreground">Community Posts</div></CardContent></Card>
-                <Card className="shadow-eco"><CardContent className="p-6 text-center"><div className="text-2xl mb-2">📊</div><div className="text-3xl font-bold text-purple-600 mb-2">{stats.totalCalculations || 0}</div><div className="text-sm text-muted-foreground">Calculations Made</div></CardContent></Card>
-                <Card className="shadow-eco"><CardContent className="p-6 text-center"><div className="text-2xl mb-2">🌱</div><div className="text-3xl font-bold text-nature mb-2">{stats.totalCarbonSaved || 0}kg</div><div className="text-sm text-muted-foreground">CO₂ Calculated</div></CardContent></Card>
               </div>
               {/* DEMOGRAPHIC INFOGRAPHICS SECTION */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
