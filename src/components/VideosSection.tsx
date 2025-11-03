@@ -10,9 +10,9 @@ type Video = {
 const VIDEOS: Video[] = [
   {
     id: "v1",
-    title: "Welcome to the city of Angels",
-    youtubeId: "vzlS4P-R-rk", // replace with real ids
-    description: "Welcome to Angeles City Pampanga",
+    title: "Sustainable Tourism?",
+    youtubeId: "vfuRriYKP4s", // replace with real ids
+    description: "Join the call for a more greener travels",
   },
   {
     id: "v2",
