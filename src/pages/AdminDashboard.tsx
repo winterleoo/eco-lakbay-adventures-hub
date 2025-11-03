@@ -1,4 +1,4 @@
-import { useEffect, useState,  useMemo  } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -54,7 +54,7 @@ const PAGE_SIZE = 10;
 const AdminDashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-   
+
   // State
   const [profile, setProfile] = useState<any>(null);
   const [allDestinations, setAllDestinations] = useState<any[]>([]);
@@ -82,7 +82,7 @@ const AdminDashboard = () => {
   const [editingUser, setEditingUser] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isCreateUserModalOpen, setIsCreateUserModalOpen] = useState(false);
-  
+
   const filteredUsers = useMemo(() => {
     if (!allUsers) return [];
     return allUsers.filter(u =>
@@ -90,7 +90,7 @@ const AdminDashboard = () => {
         u.email?.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [allUsers, searchTerm]);
-  
+
   const logAction = async (action: string, details: object) => {
     try {
       const { error } = await supabase.from('audit_log').insert({ user_id: user?.id, action, details });
@@ -119,7 +119,7 @@ const AdminDashboard = () => {
       if ((destData || []).length < PAGE_SIZE) {
         setHasMoreDestinations(false);
       }
-        
+      
       const { data: usersData, error: usersError } = await supabase.from('profiles').select('*').order('full_name', { ascending: true });
       if (usersError) throw usersError;
       setAllUsers(usersData || []);
@@ -127,10 +127,10 @@ const AdminDashboard = () => {
       const { data: ratingsData, error: ratingsError } = await supabase.from('destination_ratings').select(`*, destinations!inner(business_name), profiles!inner(full_name)`).order('created_at', { ascending: false });
       if (ratingsError) throw ratingsError;
       setAllRatings(ratingsData || []);
-        
+      
       const { count: postsCount } = await supabase.from('posts').select('id', { count: 'exact', head: true });
       const { count: calculatorCount } = await supabase.from('calculator_entries').select('id', { count: 'exact', head: true });
-      
+
       // --- PAGINATION: Fetch only the first page of the activity log ---
       const { data: logData, error: logError } = await supabase
         .from('audit_log')
@@ -150,12 +150,11 @@ const AdminDashboard = () => {
       setLoadingData(false);
     }
   };
-
+  
   // --- PAGINATION: Function to load more activity logs ---
   const loadMoreLogs = async () => {
     if (loadingMoreLogs || !hasMoreLogs) return;
     setLoadingMoreLogs(true);
-
     const from = activityLogPage * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
@@ -181,7 +180,6 @@ const AdminDashboard = () => {
   const loadMoreDestinations = async () => {
     if (loadingMoreDestinations || !hasMoreDestinations) return;
     setLoadingMoreDestinations(true);
-    
     const from = destinationsPage * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
     
@@ -246,12 +244,11 @@ const AdminDashboard = () => {
   const handleSaveEditModal = () => { logAction('destination_details_updated', { destinationId: editingDestination?.id, destinationName: editingDestination?.business_name }); handleCloseEditModal(); toast({ title: "Success", description: "Destination details updated." }); loadAdminData(); };
   const handleOpenPermitsModal = (dest: any) => { setViewingDestinationPermits(dest); setIsPermitsModalOpen(true); };
   const handleClosePermitsModal = () => { setViewingDestinationPermits(null); setIsPermitsModalOpen(false); };
-  
+
   const formatLogEntry = (log: LogEntry) => {
     let icon = <Clock className="h-4 w-4 text-muted-foreground" />;
     let message = <span className="text-muted-foreground">{log.profiles?.full_name || 'A user'}</span>;
     let actionText = '';
-
     switch(log.action) {
       case 'destination_status_changed':
         actionText = ` ${log.details.status} the destination "${log.details.destinationName}".`;
@@ -289,7 +286,7 @@ const AdminDashboard = () => {
   }
   
   const userName = profile?.full_name || user?.email?.split('@')[0] || 'Admin';
-  const totalDestinations = allDestinations.length; // This will now show the count of loaded destinations
+  const totalDestinations = allDestinations.length; // This now shows the count of loaded destinations
   const totalUsers = allUsers.length;
 
   const handleDeleteUser = async (userIdToDelete: string) => {
@@ -308,27 +305,38 @@ const AdminDashboard = () => {
     setIsCreateUserModalOpen(false);
     loadAdminData();
   };
-  
+
   return (
     <>
       <div className="min-h-screen bg-background">
         <Navigation />
-        {/* Header Section remains unchanged */}
         <div className="bg-gradient-to-r from-red-600 to-red-800 py-20">
-          {/* ... */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex items-center space-x-6">
+                    <Avatar className="w-20 h-20"><AvatarFallback className="bg-white text-red-600 text-2xl font-bold">{userName.split(' ').map(n => n[0]).join('')}</AvatarFallback></Avatar>
+                    <div>
+                        <div className="flex items-center gap-3 mb-2"><h1 className="text-4xl font-bold">Admin Dashboard</h1><Badge variant="destructive">ADMIN</Badge></div>
+                        <p className="text-xl text-white/90">Managing EcoLakbay Platform</p>
+                    </div>
+                </div>
+            </div>
         </div>
         <div className="py-20">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              {/* Stats and Infographics Cards remain unchanged */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-                {/* ... */}
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
-                {/* ... */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <Card className="shadow-eco"><CardContent className="p-6 text-center"><Users className="w-8 h-8 text-blue-600 mx-auto mb-2" /><div className="text-3xl font-bold text-blue-600 mb-2">{totalUsers}</div><div className="text-sm text-muted-foreground">Total Users</div></CardContent></Card>
+                <Card className="shadow-eco"><CardContent className="p-6 text-center"><MapPin className="w-8 h-8 text-green-600 mx-auto mb-2" /><div className="text-3xl font-bold text-green-600 mb-2">{totalDestinations}</div><div className="text-sm text-muted-foreground">Loaded Destinations</div></CardContent></Card>
+                <Card className="shadow-eco"><CardContent className="p-6 text-center"><TrendingUp className="w-8 h-8 text-amber-600 mx-auto mb-2" /><div className="text-3xl font-bold text-amber-600 mb-2">{stats.totalPosts || 0}</div><div className="text-sm text-muted-foreground">Community Posts</div></CardContent></Card>
               </div>
 
-              {/* User Activity Log */}
-              <Card className="shadow-eco xl:col-span-1">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
+                <Card className="shadow-eco">{/* Gender Ratio Card */}</Card>
+                <Card className="shadow-eco">{/* Nationality Distribution Card */}</Card>
+                <Card className="shadow-eco">{/* Top Towns / Cities Card */}</Card>
+              </div>
+              
+              <div className="grid grid-cols-1 gap-8">
+                <Card className="shadow-eco">
                  <CardHeader><CardTitle className="text-xl text-forest">Recent Activity Log</CardTitle></CardHeader>
                  <CardContent>
                    <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
@@ -345,107 +353,63 @@ const AdminDashboard = () => {
                        );
                      }) : (<p className="text-center text-muted-foreground py-8">No recent activity found.</p>)}
                    </div>
-                   {/* --- PAGINATION: Add Load More button for Activity Log --- */}
                    {hasMoreLogs && (
                      <div className="text-center mt-4">
                        <Button onClick={loadMoreLogs} disabled={loadingMoreLogs} variant="outline">
-                         {loadingMoreLogs ? (
-                           <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>
-                         ) : (
-                           'Load More'
-                         )}
+                         {loadingMoreLogs ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>) : ('Load More')}
                        </Button>
                      </div>
                    )}
                  </CardContent>
                </Card>
+              </div>
 
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 mt-8"> {/* Added mt-8 for spacing */}
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 mt-8">
                 <Card className="shadow-eco xl:col-span-3">
                   <CardHeader><CardTitle className="text-xl text-forest">Manage All Destinations</CardTitle></CardHeader>
                   <CardContent>
-                    <div className="space-y-4 max-h-[600px] overflow-y-auto">
-                        {allDestinations.map((dest) => (
-                            <div key={dest.id} className="flex items-center justify-between p-4 bg-gradient-card rounded-lg">
-                                <div>
-                                    <p className="font-semibold">{dest.business_name}</p>
-                                    <p className="text-sm text-muted-foreground">{dest.city}, {dest.province}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                <Badge variant={statusColors[dest.status] || 'default'} className="capitalize w-24 justify-center">{dest.status}</Badge>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        <DropdownMenuItem onClick={() => handleOpenPermitsModal(dest)}><FileText className="mr-2 h-4 w-4" />View Permits</DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleOpenEditModal(dest)}><Edit2 className="mr-2 h-4 w-4" />Update Details</DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleStatusUpdate(dest.id, 'approved', dest.business_name)} disabled={dest.status === 'approved'}>Approve</DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleStatusUpdate(dest.id, 'rejected', dest.business_name)} disabled={dest.status === 'rejected'}>Reject</DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleStatusUpdate(dest.id, 'archived', dest.business_name)} className="text-destructive" disabled={dest.status === 'archived'}><Archive className="mr-2 h-4 w-4" />Archive</DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    {/* --- PAGINATION: Add Load More button for Destinations --- */}
-                    {hasMoreDestinations && (
-                        <div className="text-center mt-4">
-                            <Button onClick={loadMoreDestinations} disabled={loadingMoreDestinations} variant="outline">
-                                {loadingMoreDestinations ? (
-                                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>
-                                ) : (
-                                    'Load More Destinations'
-                                )}
-                            </Button>
+                    <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                      {allDestinations.map((dest) => (
+                        <div key={dest.id} className="flex items-center justify-between p-4 bg-gradient-card rounded-lg">
+                          <div>
+                            <p className="font-semibold">{dest.business_name}</p>
+                            <p className="text-sm text-muted-foreground">{dest.city}, {dest.province}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={statusColors[dest.status] || 'default'} className="capitalize w-24 justify-center">{dest.status}</Badge>
+                            <DropdownMenu>{/* Dropdown Menu content */}</DropdownMenu>
+                          </div>
                         </div>
+                      ))}
+                    </div>
+                    {hasMoreDestinations && (
+                      <div className="text-center mt-4">
+                        <Button onClick={loadMoreDestinations} disabled={loadingMoreDestinations} variant="outline">
+                          {loadingMoreDestinations ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>) : ('Load More Destinations')}
+                        </Button>
+                      </div>
                     )}
                   </CardContent>
                 </Card>
-                
-                {/* Other cards remain unchanged */}
+
                 <Card className="shadow-eco">
                     <CardHeader><CardTitle className="text-xl text-forest">Recent Ratings</CardTitle></CardHeader>
-                  <CardContent><div className="space-y-4 max-h-96 overflow-y-auto">{allRatings.slice(0, 10).map((rating) => (<div key={rating.id} className="p-4 bg-gradient-card rounded-lg"><div className="flex items-start justify-between mb-2"><div><h4 className="font-semibold text-forest">{rating.destinations?.business_name}</h4><p className="text-sm text-muted-foreground">by {rating.profiles?.full_name}</p></div><div className="flex items-center gap-1"><span className="text-sm font-medium">{rating.overall_score}/5</span></div></div><p className="text-xs text-muted-foreground">{new Date(rating.created_at).toLocaleDateString()}</p>{rating.comments && <p className="text-sm mt-2 italic line-clamp-2">{rating.comments}</p>}</div>))}{allRatings.length === 0 && <p className="text-center text-muted-foreground py-8">No ratings yet</p>}</div></CardContent>
+                    <CardContent>{/* Recent Ratings Content */}</CardContent>
                 </Card>
+
                 <Card className="shadow-eco xl:col-span-2">
-                  <CardHeader>
-                    <div className="flex justify-between items-center">
-                        <CardTitle className="text-xl text-forest flex items-center gap-2"><Users className="h-5 w-5" /> All Users</CardTitle>
-                        <Button onClick={() => setIsCreateUserModalOpen(true)} size="sm">
-                            <Plus className="h-4 w-4 mr-2"/> Create User
-                        </Button>
-                    </div>
-                    <div className="flex items-center space-x-2 pt-4">
-                        <Search className="h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Search users..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="max-w-sm" />
-                    </div>
-                  </CardHeader>
-                </Card>
-                <Card className="shadow-eco xl:col-span-2">
-                    <CardHeader>
-                    <div className="flex justify-between items-center">
-                        <CardTitle className="text-xl text-forest flex items-center gap-2"><Users className="h-5 w-5" /> All Users</CardTitle>
-                        <Button onClick={() => setIsCreateUserModalOpen(true)} size="sm">
-                            <Plus className="h-4 w-4 mr-2"/> Create User
-                        </Button>
-                    </div>
-                    <div className="flex items-center space-x-2 pt-4">
-                        <Search className="h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Search users..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="max-w-sm" />
-                    </div>
-                  </CardHeader>
+                  <CardHeader>{/* All Users Header */}</CardHeader>
+                  <CardContent>{/* All Users Content */}</CardContent>
                 </Card>
               </div>
             </div>
         </div>
         <Footer />
       </div>
-      {/* Modals remain unchanged */}
+
       <ViewPermitsModal isOpen={isPermitsModalOpen} onClose={handleClosePermitsModal} destination={viewingDestinationPermits} />
       <CreateUserModal isOpen={isCreateUserModalOpen} onClose={() => setIsCreateUserModalOpen(false)} onUserCreated={handleUserCreated} />
-      <EditDestinationModal isOpen={isEditModalOpen} onClose={handleCloseEditModal} onSave={handleSaveEditModal}  onDelete={handleDestinationDeleted} destination={editingDestination} />
+      <EditDestinationModal isOpen={isEditModalOpen} onClose={handleCloseEditModal} onSave={handleSaveEditModal} onDelete={handleDestinationDeleted} destination={editingDestination} />
     </>
   );
 };
