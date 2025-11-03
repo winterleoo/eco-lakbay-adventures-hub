@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState,  useMemo  } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -54,7 +54,7 @@ const PAGE_SIZE = 10;
 const AdminDashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  
+   
   // State
   const [profile, setProfile] = useState<any>(null);
   const [allDestinations, setAllDestinations] = useState<any[]>([]);
@@ -64,12 +64,12 @@ const AdminDashboard = () => {
   const [stats, setStats] = useState<any>({});
   const [loadingData, setLoadingData] = useState(true);
 
-  // --- PAGINATION: State for Activity Log pagination ---
+  // --- PAGINATION: State for Activity Log ---
   const [activityLogPage, setActivityLogPage] = useState(1);
   const [hasMoreLogs, setHasMoreLogs] = useState(true);
   const [loadingMoreLogs, setLoadingMoreLogs] = useState(false);
 
-  // --- PAGINATION: State for Destinations pagination ---
+  // --- PAGINATION: State for Destinations ---
   const [destinationsPage, setDestinationsPage] = useState(1);
   const [hasMoreDestinations, setHasMoreDestinations] = useState(true);
   const [loadingMoreDestinations, setLoadingMoreDestinations] = useState(false);
@@ -86,8 +86,8 @@ const AdminDashboard = () => {
   const filteredUsers = useMemo(() => {
     if (!allUsers) return [];
     return allUsers.filter(u =>
-      u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email?.toLowerCase().includes(searchTerm.toLowerCase())
+        u.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        u.email?.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [allUsers, searchTerm]);
   
@@ -103,15 +103,23 @@ const AdminDashboard = () => {
   const loadAdminData = async () => {
     setLoadingData(true);
     try {
+      // Reset pagination state on full reload
+      setActivityLogPage(1);
+      setDestinationsPage(1);
+      setHasMoreLogs(true);
+      setHasMoreDestinations(true);
+
       const { data: profileData } = await supabase.from('profiles').select('*').eq('user_id', user!.id).single();
       setProfile(profileData);
 
-      // --- PAGINATION: Fetch the first page of destinations ---
+      // --- PAGINATION: Fetch only the first page of destinations ---
       const { data: destData, error: destError } = await supabase.from('destinations').select('*, destination_permits(*)').order('created_at', { ascending: false }).range(0, PAGE_SIZE - 1);
       if (destError) throw destError;
       setAllDestinations(destData || []);
-      if (destData.length < PAGE_SIZE) setHasMoreDestinations(false); // Check if there's more to load
-
+      if ((destData || []).length < PAGE_SIZE) {
+        setHasMoreDestinations(false);
+      }
+        
       const { data: usersData, error: usersError } = await supabase.from('profiles').select('*').order('full_name', { ascending: true });
       if (usersError) throw usersError;
       setAllUsers(usersData || []);
@@ -123,7 +131,7 @@ const AdminDashboard = () => {
       const { count: postsCount } = await supabase.from('posts').select('id', { count: 'exact', head: true });
       const { count: calculatorCount } = await supabase.from('calculator_entries').select('id', { count: 'exact', head: true });
       
-      // --- PAGINATION: Fetch the first page of the activity log ---
+      // --- PAGINATION: Fetch only the first page of the activity log ---
       const { data: logData, error: logError } = await supabase
         .from('audit_log')
         .select(`*, profiles(full_name)`)
@@ -132,10 +140,12 @@ const AdminDashboard = () => {
         
       if (logError) throw logError;
       setActivityLog(logData || []);
-      if(logData.length < PAGE_SIZE) setHasMoreLogs(false); // Check if there's more to load
+      if ((logData || []).length < PAGE_SIZE) {
+        setHasMoreLogs(false);
+      }
 
     } catch (error: any) {
-      toast({ title: "Data Loading Error", description: `Failed to load admin data: ${error.message}.`, variant: "destructive" });
+        toast({ title: "Data Loading Error", description: `Failed to load admin data: ${error.message}.`, variant: "destructive" });
     } finally {
       setLoadingData(false);
     }
@@ -204,81 +214,182 @@ const AdminDashboard = () => {
       toast({ title: "Update Failed", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: `Destination has been ${status}.` });
-      // Refresh only the specific item instead of the whole list for better UX
-      setAllDestinations(prev => prev.map(d => d.id === destinationId ? {...d, status} : d));
+      // --- PAGINATION: Update state locally instead of full reload ---
+      setAllDestinations(prevDests => prevDests.map(dest => 
+        dest.id === destinationId ? { ...dest, status } : dest
+      ));
     }
   };
 
-  // ... (other handler functions like handleUpdateUser, handleDestinationDeleted, etc. remain the same)
-  const handleUpdateUser = async (userId: string, updates: any) => { /* ... */ };
-  const handleDestinationDeleted = () => { /* ... */ };
+  const handleUpdateUser = async (userId: string, updates: any) => {
+    const { id, user_id, joined_at, email, ...updateData } = updates;
+    const { error } = await supabase.from('profiles').update(updateData).eq('user_id', userId);
+    if (error) {
+      toast({ title: "User update failed", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "User updated successfully" });
+      await logAction('user_profile_updated', { userId, userName: updates.full_name });
+      setEditingUser(null);
+      loadAdminData();
+    }
+  };
+
+  const handleDestinationDeleted = () => {
+    logAction('destination_deleted', { destinationId: editingDestination?.id, destinationName: editingDestination?.business_name });
+    setIsEditModalOpen(false);
+    setEditingDestination(null);
+    loadAdminData(); // Full reload is okay after a deletion
+  };
+
   const handleOpenEditModal = (dest: any) => { setEditingDestination(dest); setIsEditModalOpen(true); };
   const handleCloseEditModal = () => { setEditingDestination(null); setIsEditModalOpen(false); };
   const handleSaveEditModal = () => { logAction('destination_details_updated', { destinationId: editingDestination?.id, destinationName: editingDestination?.business_name }); handleCloseEditModal(); toast({ title: "Success", description: "Destination details updated." }); loadAdminData(); };
   const handleOpenPermitsModal = (dest: any) => { setViewingDestinationPermits(dest); setIsPermitsModalOpen(true); };
   const handleClosePermitsModal = () => { setViewingDestinationPermits(null); setIsPermitsModalOpen(false); };
-  const handleDeleteUser = async (userIdToDelete: string) => { /* ... */ };
-  const handleUserCreated = () => { setIsCreateUserModalOpen(false); loadAdminData(); };
-
-  const formatLogEntry = (log: LogEntry) => { /* ... (this function remains unchanged) */ return { icon: <div/>, message: '' } };
-
-  if (loadingData) { /* ... (this block remains unchanged) */ }
   
-  // ... (some variable declarations remain the same)
-  const userName = profile?.full_name || user?.email?.split('@')[0] || 'Admin';
+  const formatLogEntry = (log: LogEntry) => {
+    let icon = <Clock className="h-4 w-4 text-muted-foreground" />;
+    let message = <span className="text-muted-foreground">{log.profiles?.full_name || 'A user'}</span>;
+    let actionText = '';
 
+    switch(log.action) {
+      case 'destination_status_changed':
+        actionText = ` ${log.details.status} the destination "${log.details.destinationName}".`;
+        if (log.details.status === 'approved') icon = <CheckCircle className="h-4 w-4 text-green-500" />;
+        else icon = <XCircle className="h-4 w-4 text-red-500" />;
+        break;
+      case 'user_profile_updated':
+        actionText = ` updated the profile for "${log.details.userName}".`;
+        icon = <Edit2 className="h-4 w-4 text-blue-500" />;
+        break;
+      case 'destination_deleted':
+        actionText = ` deleted the destination "${log.details.destinationName}".`;
+        icon = <Archive className="h-4 w-4 text-destructive" />;
+        break;
+      case 'destination_details_updated':
+        actionText = ` updated the details for "${log.details.destinationName}".`;
+        icon = <Edit2 className="h-4 w-4 text-blue-500" />;
+        break;
+      case 'new_rating_submitted':
+        icon = <Star className="h-4 w-4 text-amber-500" />;
+        actionText = ` submitted a ${log.details.rating}-star review for "${log.details.destinationName}".`;
+        break;
+      default:
+        actionText = ` performed an action: ${log.action}.`;
+    }
+    return { icon, message: <>{message}{actionText}</> };
+  };
+
+  if (loadingData) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Navigation /><div className="flex-grow flex items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-forest"/></div><Footer />
+      </div>
+    );
+  }
+  
+  const userName = profile?.full_name || user?.email?.split('@')[0] || 'Admin';
+  const totalDestinations = allDestinations.length; // This will now show the count of loaded destinations
+  const totalUsers = allUsers.length;
+
+  const handleDeleteUser = async (userIdToDelete: string) => {
+    try {
+      const { error } = await supabase.functions.invoke('hard-delete-user', { body: { user_id_to_delete: userIdToDelete } });
+      if (error) throw error;
+      toast({ title: "User Deleted", description: "The user has been permanently removed."});
+      await logAction('user_deleted', { deletedUserId: userIdToDelete });
+      loadAdminData();
+    } catch (error: any) {
+      toast({ title: "Deletion Failed", description: error.message, variant: "destructive"});
+    }
+  };
+
+  const handleUserCreated = () => {
+    setIsCreateUserModalOpen(false);
+    loadAdminData();
+  };
+  
   return (
     <>
       <div className="min-h-screen bg-background">
         <Navigation />
-        {/* ... (Header section remains unchanged) */}
-
+        {/* Header Section remains unchanged */}
+        <div className="bg-gradient-to-r from-red-600 to-red-800 py-20">
+          {/* ... */}
+        </div>
         <div className="py-20">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              {/* ... (Stats and Infographics Cards remain unchanged) */}
+              {/* Stats and Infographics Cards remain unchanged */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+                {/* ... */}
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
+                {/* ... */}
+              </div>
 
               {/* User Activity Log */}
               <Card className="shadow-eco xl:col-span-1">
-                <CardHeader><CardTitle className="text-xl text-forest">Recent Activity Log</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-                    {activityLog.length > 0 ? activityLog.map(log => {
-                      const { icon, message } = formatLogEntry(log);
-                      return (
-                        <div key={log.id} className="flex items-start gap-3">
-                          {/* ... (log item rendering) */}
-                        </div>
-                      );
-                    }) : (<p className="text-center text-muted-foreground py-8">No recent activity found.</p>)}
-                  </div>
-                  {/* --- PAGINATION: Add Load More button for Activity Log --- */}
-                  {hasMoreLogs && (
-                    <div className="text-center mt-4">
-                      <Button onClick={loadMoreLogs} disabled={loadingMoreLogs} variant="outline">
-                        {loadingMoreLogs ? (
-                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>
-                        ) : (
-                          'Load More'
-                        )}
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                 <CardHeader><CardTitle className="text-xl text-forest">Recent Activity Log</CardTitle></CardHeader>
+                 <CardContent>
+                   <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                     {activityLog.length > 0 ? activityLog.map(log => {
+                       const { icon, message } = formatLogEntry(log);
+                       return (
+                         <div key={log.id} className="flex items-start gap-3">
+                           <div className="mt-1">{icon}</div>
+                           <div className="flex-1">
+                             <p className="text-sm">{message}</p>
+                             <p className="text-xs text-muted-foreground">{new Date(log.created_at).toLocaleString()}</p>
+                           </div>
+                         </div>
+                       );
+                     }) : (<p className="text-center text-muted-foreground py-8">No recent activity found.</p>)}
+                   </div>
+                   {/* --- PAGINATION: Add Load More button for Activity Log --- */}
+                   {hasMoreLogs && (
+                     <div className="text-center mt-4">
+                       <Button onClick={loadMoreLogs} disabled={loadingMoreLogs} variant="outline">
+                         {loadingMoreLogs ? (
+                           <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>
+                         ) : (
+                           'Load More'
+                         )}
+                       </Button>
+                     </div>
+                   )}
+                 </CardContent>
+               </Card>
 
-
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 mt-8"> {/* Added mt-8 for spacing */}
                 <Card className="shadow-eco xl:col-span-3">
                   <CardHeader><CardTitle className="text-xl text-forest">Manage All Destinations</CardTitle></CardHeader>
                   <CardContent>
                     <div className="space-y-4 max-h-[600px] overflow-y-auto">
                         {allDestinations.map((dest) => (
-                           <div key={dest.id} className="flex items-center justify-between p-4 bg-gradient-card rounded-lg">
-                                {/* ... (destination item rendering) */}
-                           </div>
+                            <div key={dest.id} className="flex items-center justify-between p-4 bg-gradient-card rounded-lg">
+                                <div>
+                                    <p className="font-semibold">{dest.business_name}</p>
+                                    <p className="text-sm text-muted-foreground">{dest.city}, {dest.province}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                <Badge variant={statusColors[dest.status] || 'default'} className="capitalize w-24 justify-center">{dest.status}</Badge>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuItem onClick={() => handleOpenPermitsModal(dest)}><FileText className="mr-2 h-4 w-4" />View Permits</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleOpenEditModal(dest)}><Edit2 className="mr-2 h-4 w-4" />Update Details</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleStatusUpdate(dest.id, 'approved', dest.business_name)} disabled={dest.status === 'approved'}>Approve</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleStatusUpdate(dest.id, 'rejected', dest.business_name)} disabled={dest.status === 'rejected'}>Reject</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleStatusUpdate(dest.id, 'archived', dest.business_name)} className="text-destructive" disabled={dest.status === 'archived'}><Archive className="mr-2 h-4 w-4" />Archive</DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                                </div>
+                            </div>
                         ))}
                     </div>
-                     {/* --- PAGINATION: Add Load More button for Destinations --- */}
+                    {/* --- PAGINATION: Add Load More button for Destinations --- */}
                     {hasMoreDestinations && (
                         <div className="text-center mt-4">
                             <Button onClick={loadMoreDestinations} disabled={loadingMoreDestinations} variant="outline">
@@ -292,13 +403,49 @@ const AdminDashboard = () => {
                     )}
                   </CardContent>
                 </Card>
-                {/* ... (Other cards like Recent Ratings and All Users remain) */}
+                
+                {/* Other cards remain unchanged */}
+                <Card className="shadow-eco">
+                    <CardHeader><CardTitle className="text-xl text-forest">Recent Ratings</CardTitle></CardHeader>
+                  <CardContent><div className="space-y-4 max-h-96 overflow-y-auto">{allRatings.slice(0, 10).map((rating) => (<div key={rating.id} className="p-4 bg-gradient-card rounded-lg"><div className="flex items-start justify-between mb-2"><div><h4 className="font-semibold text-forest">{rating.destinations?.business_name}</h4><p className="text-sm text-muted-foreground">by {rating.profiles?.full_name}</p></div><div className="flex items-center gap-1"><span className="text-sm font-medium">{rating.overall_score}/5</span></div></div><p className="text-xs text-muted-foreground">{new Date(rating.created_at).toLocaleDateString()}</p>{rating.comments && <p className="text-sm mt-2 italic line-clamp-2">{rating.comments}</p>}</div>))}{allRatings.length === 0 && <p className="text-center text-muted-foreground py-8">No ratings yet</p>}</div></CardContent>
+                </Card>
+                <Card className="shadow-eco xl:col-span-2">
+                  <CardHeader>
+                    <div className="flex justify-between items-center">
+                        <CardTitle className="text-xl text-forest flex items-center gap-2"><Users className="h-5 w-5" /> All Users</CardTitle>
+                        <Button onClick={() => setIsCreateUserModalOpen(true)} size="sm">
+                            <Plus className="h-4 w-4 mr-2"/> Create User
+                        </Button>
+                    </div>
+                    <div className="flex items-center space-x-2 pt-4">
+                        <Search className="h-4 w-4 text-muted-foreground" />
+                        <Input placeholder="Search users..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="max-w-sm" />
+                    </div>
+                  </CardHeader>
+                </Card>
+                <Card className="shadow-eco xl:col-span-2">
+                    <CardHeader>
+                    <div className="flex justify-between items-center">
+                        <CardTitle className="text-xl text-forest flex items-center gap-2"><Users className="h-5 w-5" /> All Users</CardTitle>
+                        <Button onClick={() => setIsCreateUserModalOpen(true)} size="sm">
+                            <Plus className="h-4 w-4 mr-2"/> Create User
+                        </Button>
+                    </div>
+                    <div className="flex items-center space-x-2 pt-4">
+                        <Search className="h-4 w-4 text-muted-foreground" />
+                        <Input placeholder="Search users..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="max-w-sm" />
+                    </div>
+                  </CardHeader>
+                </Card>
               </div>
             </div>
         </div>
         <Footer />
       </div>
-      {/* ... (Modals remain unchanged) */}
+      {/* Modals remain unchanged */}
+      <ViewPermitsModal isOpen={isPermitsModalOpen} onClose={handleClosePermitsModal} destination={viewingDestinationPermits} />
+      <CreateUserModal isOpen={isCreateUserModalOpen} onClose={() => setIsCreateUserModalOpen(false)} onUserCreated={handleUserCreated} />
+      <EditDestinationModal isOpen={isEditModalOpen} onClose={handleCloseEditModal} onSave={handleSaveEditModal}  onDelete={handleDestinationDeleted} destination={editingDestination} />
     </>
   );
 };
