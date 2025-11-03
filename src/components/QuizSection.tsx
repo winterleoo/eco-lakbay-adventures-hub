@@ -29,43 +29,61 @@ export default function QuizSection() {
   const [results, setResults] = useState<{ score: number; results: Result[] } | null>(null);
   const { toast } = useToast();
 
-  // --- Predefined topics for dropdown ---
+  // --- Predefined sustainability topics (must match Edge Function) ---
   const topics = [
-    "Sustainable Tourism",
-    "Eco-Friendly Accommodations",
-    "Renewable Energy in Tourism",
-    "Waste Management Practices",
+    "Waste Management",
+    "Carbon Footprint",
+    "Responsible Tourism",
+    "Eco-Friendly Travel",
     "Biodiversity Conservation",
-    "Cultural Heritage Preservation",
+    "Sustainable Destinations",
     "Community-Based Tourism",
-    "Carbon Footprint Reduction",
-    "Green Transportation",
-    "Responsible Travel Behavior",
+    "Plastic Reduction",
+    "Energy Conservation",
+    "Cultural Heritage Preservation",
   ];
 
+  // --- Generate Quiz ---
   const handleStartQuiz = async () => {
     if (!topic.trim()) {
       toast({ title: "Please select a topic.", variant: "destructive" });
       return;
     }
+
     setIsLoading(true);
     setResults(null);
     try {
       const { data, error } = await supabase.functions.invoke("ai-quiz-handler", {
         body: { action: "generate", topic },
       });
+
       if (error) throw error;
+      if (data?.error) {
+        // Handles server-side validation (invalid topic, etc.)
+        toast({
+          title: "Quiz Generation Failed",
+          description: data.error,
+          variant: "destructive",
+        });
+        return;
+      }
+
       setQuizId(data.quizId);
       setQuestions(data.questions);
       setUserAnswers(new Array(data.questions.length).fill(null));
       setStage("in_progress");
     } catch (err: any) {
-      toast({ title: "Failed to generate quiz", description: err.message, variant: "destructive" });
+      toast({
+        title: "Failed to generate quiz",
+        description: err.message || "Something went wrong.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
+  // --- Track Answers ---
   const handleAnswerChange = (questionIndex: number, answerIndex: number) => {
     setUserAnswers((prev) => {
       const newAnswers = [...prev];
@@ -74,6 +92,7 @@ export default function QuizSection() {
     });
   };
 
+  // --- Submit Quiz ---
   const handleSubmitQuiz = async () => {
     if (userAnswers.some((answer) => answer === null)) {
       toast({ title: "Please answer all questions.", variant: "destructive" });
@@ -88,12 +107,17 @@ export default function QuizSection() {
       setResults(data);
       setStage("results");
     } catch (err: any) {
-      toast({ title: "Failed to submit quiz", description: err.message, variant: "destructive" });
+      toast({
+        title: "Failed to submit quiz",
+        description: err.message || "An error occurred.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
+  // --- Restart ---
   const handlePlayAgain = () => {
     setStage("topic_selection");
     setTopic("");
@@ -103,6 +127,7 @@ export default function QuizSection() {
     setQuizId(null);
   };
 
+  // --- Render UI by Stage ---
   const renderContent = () => {
     if (isLoading) {
       return (
@@ -116,7 +141,7 @@ export default function QuizSection() {
       case "topic_selection":
         return (
           <div className="flex flex-col items-center gap-4 p-8">
-            <h3 className="text-xl font-semibold">Choose your quiz topic</h3>
+            <h3 className="text-xl font-semibold">Choose a Sustainable Topic</h3>
             <div className="flex flex-col w-full max-w-sm items-center space-y-4">
               <Select onValueChange={(value) => setTopic(value)}>
                 <SelectTrigger className="w-full">
@@ -156,7 +181,7 @@ export default function QuizSection() {
               </div>
             ))}
             <Button onClick={handleSubmitQuiz} className="w-full">
-              Submit
+              Submit Answers
             </Button>
           </div>
         );
@@ -189,11 +214,11 @@ export default function QuizSection() {
                     }`}
                   >
                     Your answer: {q.options[userAnswers[index]!]}{" "}
-                    {results?.results[index].isCorrect ? " (Correct)" : " (Incorrect)"}
+                    {results?.results[index].isCorrect ? "✅" : "❌"}
                   </p>
                   {!results?.results[index].isCorrect && (
                     <p className="text-sm text-green-700 dark:text-green-300">
-                      Correct answer: {q.options[results?.results[index].correctAnswerIndex!]}
+                      Correct answer: {q.options[results.results[index].correctAnswerIndex!]}
                     </p>
                   )}
                 </div>
@@ -211,7 +236,7 @@ export default function QuizSection() {
         <CardHeader>
           <CardTitle>AI Eco Quiz</CardTitle>
           <CardDescription>
-            Test your knowledge on eco-friendly tourism and sustainability topics!
+            Test your knowledge on sustainability and responsible tourism!
           </CardDescription>
         </CardHeader>
         <CardContent>{renderContent()}</CardContent>
