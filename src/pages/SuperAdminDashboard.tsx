@@ -61,6 +61,7 @@ const SuperAdminDashboard = () => {
   const [destinations, setDestinations] = useState<Destination[]>([]); // --- MODIFIED ---
   const [destinationStatusChartData, setDestinationStatusChartData] = useState<any[]>([]);
     const [activityLog, setActivityLog] = useState<LogEntry[]>([]);
+     const [loadingData, setLoadingData] = useState(true); 
 
   const isSuperAdmin = user?.email === 'johnleomedina@gmail.com' && isAdmin;
 
