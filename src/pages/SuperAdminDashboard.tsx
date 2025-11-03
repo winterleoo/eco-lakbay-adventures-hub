@@ -73,7 +73,7 @@ const SuperAdminDashboard = () => {
 
    // --- MODIFIED ---: Modify the destinations fetch query
      const fetchAllData = async () => {
-        setLoading(true); // Assuming you have setLoading defined
+        setLoadingData(true); // Assuming you have setLoading defined
         try {
             // Fetch users and roles
             const { data: profiles, error: profilesError } = await supabase.from('profiles').select('*').order('full_name', { ascending: true });
