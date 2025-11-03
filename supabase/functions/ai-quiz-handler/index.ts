@@ -69,7 +69,7 @@ serve(async (req) => {
 
       const systemPrompt = `
         You are a sustainability-focused AI that generates quizzes.
-        Create a 5-question multiple-choice quiz about the topic: "${topic}".
+        Create a 10-question multiple-choice quiz about the topic: "${topic}".
         Each question must have exactly 4 options.
         Return only JSON in the format:
         {
@@ -166,3 +166,4 @@ serve(async (req) => {
     });
   }
 });
+
