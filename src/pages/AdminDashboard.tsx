@@ -48,7 +48,6 @@ const statusColors: { [key: string]: 'default' | 'secondary' | 'destructive' | '
   pending: 'secondary', approved: 'default', rejected: 'destructive', archived: 'outline',
 };
 
-// --- PAGINATION: Define a constant for how many items to fetch per page ---
 const PAGE_SIZE = 10;
 
 const AdminDashboard = () => {
@@ -64,12 +63,10 @@ const AdminDashboard = () => {
   const [stats, setStats] = useState<any>({});
   const [loadingData, setLoadingData] = useState(true);
 
-  // --- PAGINATION: State for Activity Log ---
+  // Pagination State
   const [activityLogPage, setActivityLogPage] = useState(1);
   const [hasMoreLogs, setHasMoreLogs] = useState(true);
   const [loadingMoreLogs, setLoadingMoreLogs] = useState(false);
-
-  // --- PAGINATION: State for Destinations ---
   const [destinationsPage, setDestinationsPage] = useState(1);
   const [hasMoreDestinations, setHasMoreDestinations] = useState(true);
   const [loadingMoreDestinations, setLoadingMoreDestinations] = useState(false);
@@ -103,7 +100,6 @@ const AdminDashboard = () => {
   const loadAdminData = async () => {
     setLoadingData(true);
     try {
-      // Reset pagination state on full reload
       setActivityLogPage(1);
       setDestinationsPage(1);
       setHasMoreLogs(true);
@@ -112,13 +108,10 @@ const AdminDashboard = () => {
       const { data: profileData } = await supabase.from('profiles').select('*').eq('user_id', user!.id).single();
       setProfile(profileData);
 
-      // --- PAGINATION: Fetch only the first page of destinations ---
       const { data: destData, error: destError } = await supabase.from('destinations').select('*, destination_permits(*)').order('created_at', { ascending: false }).range(0, PAGE_SIZE - 1);
       if (destError) throw destError;
       setAllDestinations(destData || []);
-      if ((destData || []).length < PAGE_SIZE) {
-        setHasMoreDestinations(false);
-      }
+      if ((destData || []).length < PAGE_SIZE) setHasMoreDestinations(false);
       
       const { data: usersData, error: usersError } = await supabase.from('profiles').select('*').order('full_name', { ascending: true });
       if (usersError) throw usersError;
@@ -129,21 +122,23 @@ const AdminDashboard = () => {
       setAllRatings(ratingsData || []);
       
       const { count: postsCount } = await supabase.from('posts').select('id', { count: 'exact', head: true });
-      // --- PAGINATION: Fetch only the first page of the activity log ---
-      const { data: logData, error: logError } = await supabase
-        .from('audit_log')
-        .select(`*, profiles(full_name)`)
-        .order('created_at', { ascending: false })
-        .range(0, PAGE_SIZE - 1);
-        
+      
+      // --- CHANGE 1: Fetch the count of ONLY active ('approved') destinations ---
+      const { count: activeDestinationsCount, error: activeDestError } = await supabase
+        .from('destinations')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'approved');
+      if (activeDestError) throw activeDestError;
+
+      const { data: logData, error: logError } = await supabase.from('audit_log').select(`*, profiles(full_name)`).order('created_at', { ascending: false }).range(0, PAGE_SIZE - 1);
       if (logError) throw logError;
       setActivityLog(logData || []);
-      if ((logData || []).length < PAGE_SIZE) {
-        setHasMoreLogs(false);
-      }
+      if ((logData || []).length < PAGE_SIZE) setHasMoreLogs(false);
       
+      // --- CHANGE 2: Add the new active destination count to the stats object ---
       setStats({
           totalPosts: postsCount || 0,
+          totalActiveDestinations: activeDestinationsCount || 0,
       });
 
     } catch (error: any) {
@@ -153,52 +148,36 @@ const AdminDashboard = () => {
     }
   };
   
-  // --- PAGINATION: Function to load more activity logs ---
   const loadMoreLogs = async () => {
     if (loadingMoreLogs || !hasMoreLogs) return;
     setLoadingMoreLogs(true);
     const from = activityLogPage * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
-    const { data: newLogs, error } = await supabase
-      .from('audit_log')
-      .select(`*, profiles(full_name)`)
-      .order('created_at', { ascending: false })
-      .range(from, to);
-    
+    const { data: newLogs, error } = await supabase.from('audit_log').select(`*, profiles(full_name)`).order('created_at', { ascending: false }).range(from, to);
     if (error) {
       toast({ title: "Error", description: "Could not load more activity.", variant: "destructive" });
     } else if (newLogs) {
       setActivityLog(prev => [...prev, ...newLogs]);
       setActivityLogPage(prev => prev + 1);
-      if (newLogs.length < PAGE_SIZE) {
-        setHasMoreLogs(false);
-      }
+      if (newLogs.length < PAGE_SIZE) setHasMoreLogs(false);
     }
     setLoadingMoreLogs(false);
   };
 
-  // --- PAGINATION: Function to load more destinations ---
   const loadMoreDestinations = async () => {
     if (loadingMoreDestinations || !hasMoreDestinations) return;
     setLoadingMoreDestinations(true);
     const from = destinationsPage * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
     
-    const { data: newDests, error } = await supabase
-      .from('destinations')
-      .select('*, destination_permits(*)')
-      .order('created_at', { ascending: false })
-      .range(from, to);
-      
+    const { data: newDests, error } = await supabase.from('destinations').select('*, destination_permits(*)').order('created_at', { ascending: false }).range(from, to);
     if (error) {
       toast({ title: "Error", description: "Could not load more destinations.", variant: "destructive" });
     } else if (newDests) {
       setAllDestinations(prev => [...prev, ...newDests]);
       setDestinationsPage(prev => prev + 1);
-      if (newDests.length < PAGE_SIZE) {
-        setHasMoreDestinations(false);
-      }
+      if (newDests.length < PAGE_SIZE) setHasMoreDestinations(false);
     }
     setLoadingMoreDestinations(false);
   };
@@ -214,10 +193,12 @@ const AdminDashboard = () => {
       toast({ title: "Update Failed", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: `Destination has been ${status}.` });
-      // --- PAGINATION: Update state locally instead of full reload ---
       setAllDestinations(prevDests => prevDests.map(dest => 
         dest.id === destinationId ? { ...dest, status } : dest
       ));
+      // Refresh the active count when a status changes
+      const { count } = await supabase.from('destinations').select('id', { count: 'exact', head: true }).eq('status', 'approved');
+      setStats(prevStats => ({ ...prevStats, totalActiveDestinations: count || 0 }));
     }
   };
 
@@ -238,7 +219,7 @@ const AdminDashboard = () => {
     logAction('destination_deleted', { destinationId: editingDestination?.id, destinationName: editingDestination?.business_name });
     setIsEditModalOpen(false);
     setEditingDestination(null);
-    loadAdminData(); // Full reload is okay after a deletion
+    loadAdminData();
   };
 
   const handleOpenEditModal = (dest: any) => { setEditingDestination(dest); setIsEditModalOpen(true); };
@@ -254,24 +235,19 @@ const AdminDashboard = () => {
     switch(log.action) {
       case 'destination_status_changed':
         actionText = ` ${log.details.status} the destination "${log.details.destinationName}".`;
-        if (log.details.status === 'approved') icon = <CheckCircle className="h-4 w-4 text-green-500" />;
-        else icon = <XCircle className="h-4 w-4 text-red-500" />;
+        if (log.details.status === 'approved') icon = <CheckCircle className="h-4 w-4 text-green-500" />; else icon = <XCircle className="h-4 w-4 text-red-500" />;
         break;
       case 'user_profile_updated':
-        actionText = ` updated the profile for "${log.details.userName}".`;
-        icon = <Edit2 className="h-4 w-4 text-blue-500" />;
+        actionText = ` updated the profile for "${log.details.userName}".`; icon = <Edit2 className="h-4 w-4 text-blue-500" />;
         break;
       case 'destination_deleted':
-        actionText = ` deleted the destination "${log.details.destinationName}".`;
-        icon = <Archive className="h-4 w-4 text-destructive" />;
+        actionText = ` deleted the destination "${log.details.destinationName}".`; icon = <Archive className="h-4 w-4 text-destructive" />;
         break;
       case 'destination_details_updated':
-        actionText = ` updated the details for "${log.details.destinationName}".`;
-        icon = <Edit2 className="h-4 w-4 text-blue-500" />;
+        actionText = ` updated the details for "${log.details.destinationName}".`; icon = <Edit2 className="h-4 w-4 text-blue-500" />;
         break;
       case 'new_rating_submitted':
-        icon = <Star className="h-4 w-4 text-amber-500" />;
-        actionText = ` submitted a ${log.details.rating}-star review for "${log.details.destinationName}".`;
+        icon = <Star className="h-4 w-4 text-amber-500" />; actionText = ` submitted a ${log.details.rating}-star review for "${log.details.destinationName}".`;
         break;
       default:
         actionText = ` performed an action: ${log.action}.`;
@@ -288,7 +264,6 @@ const AdminDashboard = () => {
   }
   
   const userName = profile?.full_name || user?.email?.split('@')[0] || 'Admin';
-  const totalDestinations = allDestinations.length;
   const totalUsers = allUsers.length;
 
   const handleDeleteUser = async (userIdToDelete: string) => {
@@ -327,7 +302,16 @@ const AdminDashboard = () => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                 <Card className="shadow-eco"><CardContent className="p-6 text-center"><Users className="w-8 h-8 text-blue-600 mx-auto mb-2" /><div className="text-3xl font-bold text-blue-600 mb-2">{totalUsers}</div><div className="text-sm text-muted-foreground">Total Users</div></CardContent></Card>
-                <Card className="shadow-eco"><CardContent className="p-6 text-center"><MapPin className="w-8 h-8 text-green-600 mx-auto mb-2" /><div className="text-3xl font-bold text-green-600 mb-2">{totalDestinations}</div><div className="text-sm text-muted-foreground">Loaded Destinations</div></CardContent></Card>
+                
+                {/* --- CHANGE 3: The stat card now displays the active destination count and new label --- */}
+                <Card className="shadow-eco">
+                    <CardContent className="p-6 text-center">
+                        <MapPin className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                        <div className="text-3xl font-bold text-green-600 mb-2">{stats.totalActiveDestinations || 0}</div>
+                        <div className="text-sm text-muted-foreground">Active Destinations</div>
+                    </CardContent>
+                </Card>
+                
                 <Card className="shadow-eco"><CardContent className="p-6 text-center"><TrendingUp className="w-8 h-8 text-amber-600 mx-auto mb-2" /><div className="text-3xl font-bold text-amber-600 mb-2">{stats.totalPosts || 0}</div><div className="text-sm text-muted-foreground">Community Posts</div></CardContent></Card>
               </div>
 
