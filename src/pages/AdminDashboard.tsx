@@ -48,6 +48,7 @@ const statusColors: { [key: string]: 'default' | 'secondary' | 'destructive' | '
   pending: 'secondary', approved: 'default', rejected: 'destructive', archived: 'outline',
 };
 
+// --- PAGINATION: Define a constant for how many items to fetch per page ---
 const PAGE_SIZE = 10;
 
 const AdminDashboard = () => {
@@ -63,10 +64,12 @@ const AdminDashboard = () => {
   const [stats, setStats] = useState<any>({});
   const [loadingData, setLoadingData] = useState(true);
 
-  // Pagination State
+  // --- PAGINATION: State for Activity Log ---
   const [activityLogPage, setActivityLogPage] = useState(1);
   const [hasMoreLogs, setHasMoreLogs] = useState(true);
   const [loadingMoreLogs, setLoadingMoreLogs] = useState(false);
+
+  // --- PAGINATION: State for Destinations ---
   const [destinationsPage, setDestinationsPage] = useState(1);
   const [hasMoreDestinations, setHasMoreDestinations] = useState(true);
   const [loadingMoreDestinations, setLoadingMoreDestinations] = useState(false);
@@ -100,6 +103,7 @@ const AdminDashboard = () => {
   const loadAdminData = async () => {
     setLoadingData(true);
     try {
+      // Reset pagination state on full reload
       setActivityLogPage(1);
       setDestinationsPage(1);
       setHasMoreLogs(true);
@@ -108,10 +112,13 @@ const AdminDashboard = () => {
       const { data: profileData } = await supabase.from('profiles').select('*').eq('user_id', user!.id).single();
       setProfile(profileData);
 
+      // --- PAGINATION: Fetch only the first page of destinations ---
       const { data: destData, error: destError } = await supabase.from('destinations').select('*, destination_permits(*)').order('created_at', { ascending: false }).range(0, PAGE_SIZE - 1);
       if (destError) throw destError;
       setAllDestinations(destData || []);
-      if ((destData || []).length < PAGE_SIZE) setHasMoreDestinations(false);
+      if ((destData || []).length < PAGE_SIZE) {
+        setHasMoreDestinations(false);
+      }
       
       const { data: usersData, error: usersError } = await supabase.from('profiles').select('*').order('full_name', { ascending: true });
       if (usersError) throw usersError;
@@ -122,10 +129,22 @@ const AdminDashboard = () => {
       setAllRatings(ratingsData || []);
       
       const { count: postsCount } = await supabase.from('posts').select('id', { count: 'exact', head: true });
-      const { data: logData, error: logError } = await supabase.from('audit_log').select(`*, profiles(full_name)`).order('created_at', { ascending: false }).range(0, PAGE_SIZE - 1);
+      // --- PAGINATION: Fetch only the first page of the activity log ---
+      const { data: logData, error: logError } = await supabase
+        .from('audit_log')
+        .select(`*, profiles(full_name)`)
+        .order('created_at', { ascending: false })
+        .range(0, PAGE_SIZE - 1);
+        
       if (logError) throw logError;
       setActivityLog(logData || []);
-      if ((logData || []).length < PAGE_SIZE) setHasMoreLogs(false);
+      if ((logData || []).length < PAGE_SIZE) {
+        setHasMoreLogs(false);
+      }
+      
+      setStats({
+          totalPosts: postsCount || 0,
+      });
 
     } catch (error: any) {
         toast({ title: "Data Loading Error", description: `Failed to load admin data: ${error.message}.`, variant: "destructive" });
@@ -134,39 +153,59 @@ const AdminDashboard = () => {
     }
   };
   
+  // --- PAGINATION: Function to load more activity logs ---
   const loadMoreLogs = async () => {
     if (loadingMoreLogs || !hasMoreLogs) return;
     setLoadingMoreLogs(true);
     const from = activityLogPage * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
-    const { data: newLogs, error } = await supabase.from('audit_log').select(`*, profiles(full_name)`).order('created_at', { ascending: false }).range(from, to);
+
+    const { data: newLogs, error } = await supabase
+      .from('audit_log')
+      .select(`*, profiles(full_name)`)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    
     if (error) {
       toast({ title: "Error", description: "Could not load more activity.", variant: "destructive" });
     } else if (newLogs) {
       setActivityLog(prev => [...prev, ...newLogs]);
       setActivityLogPage(prev => prev + 1);
-      if (newLogs.length < PAGE_SIZE) setHasMoreLogs(false);
+      if (newLogs.length < PAGE_SIZE) {
+        setHasMoreLogs(false);
+      }
     }
     setLoadingMoreLogs(false);
   };
 
+  // --- PAGINATION: Function to load more destinations ---
   const loadMoreDestinations = async () => {
     if (loadingMoreDestinations || !hasMoreDestinations) return;
     setLoadingMoreDestinations(true);
     const from = destinationsPage * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
-    const { data: newDests, error } = await supabase.from('destinations').select('*, destination_permits(*)').order('created_at', { ascending: false }).range(from, to);
+    
+    const { data: newDests, error } = await supabase
+      .from('destinations')
+      .select('*, destination_permits(*)')
+      .order('created_at', { ascending: false })
+      .range(from, to);
+      
     if (error) {
       toast({ title: "Error", description: "Could not load more destinations.", variant: "destructive" });
     } else if (newDests) {
       setAllDestinations(prev => [...prev, ...newDests]);
       setDestinationsPage(prev => prev + 1);
-      if (newDests.length < PAGE_SIZE) setHasMoreDestinations(false);
+      if (newDests.length < PAGE_SIZE) {
+        setHasMoreDestinations(false);
+      }
     }
     setLoadingMoreDestinations(false);
   };
   
-  useEffect(() => { if (user) loadAdminData(); }, [user]);
+  useEffect(() => {
+    if (user) loadAdminData();
+  }, [user]);
 
   const handleStatusUpdate = async (destinationId: string, status: 'approved' | 'rejected' | 'archived', destinationName: string) => {
     await logAction('destination_status_changed', { destinationId, destinationName, status });
@@ -175,47 +214,227 @@ const AdminDashboard = () => {
       toast({ title: "Update Failed", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: `Destination has been ${status}.` });
-      setAllDestinations(prevDests => prevDests.map(dest => dest.id === destinationId ? { ...dest, status } : dest));
+      // --- PAGINATION: Update state locally instead of full reload ---
+      setAllDestinations(prevDests => prevDests.map(dest => 
+        dest.id === destinationId ? { ...dest, status } : dest
+      ));
     }
   };
 
-  // ... (Other handlers: handleUpdateUser, handleDestinationDeleted, etc. remain the same)
-    const handleUpdateUser = async (userId: string, updates: any) => { /* ... */ };
-    const handleDestinationDeleted = () => { /* ... */ };
-    const handleOpenEditModal = (dest: any) => { /* ... */ };
-    const handleCloseEditModal = () => { /* ... */ };
-    const handleSaveEditModal = () => { /* ... */ };
-    const handleOpenPermitsModal = (dest: any) => { /* ... */ };
-    const handleClosePermitsModal = () => { /* ... */ };
-    const handleDeleteUser = async (userIdToDelete: string) => { /* ... */ };
-    const handleUserCreated = () => { /* ... */ };
+  const handleUpdateUser = async (userId: string, updates: any) => {
+    const { id, user_id, joined_at, email, ...updateData } = updates;
+    const { error } = await supabase.from('profiles').update(updateData).eq('user_id', userId);
+    if (error) {
+      toast({ title: "User update failed", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "User updated successfully" });
+      await logAction('user_profile_updated', { userId, userName: updates.full_name });
+      setEditingUser(null);
+      loadAdminData();
+    }
+  };
 
-  const formatLogEntry = (log: LogEntry) => { /* ... (this function is unchanged) */ return { icon: <div/>, message: '' } };
+  const handleDestinationDeleted = () => {
+    logAction('destination_deleted', { destinationId: editingDestination?.id, destinationName: editingDestination?.business_name });
+    setIsEditModalOpen(false);
+    setEditingDestination(null);
+    loadAdminData(); // Full reload is okay after a deletion
+  };
 
-  if (loadingData) { /* ... (loading spinner is unchanged) */ }
+  const handleOpenEditModal = (dest: any) => { setEditingDestination(dest); setIsEditModalOpen(true); };
+  const handleCloseEditModal = () => { setEditingDestination(null); setIsEditModalOpen(false); };
+  const handleSaveEditModal = () => { logAction('destination_details_updated', { destinationId: editingDestination?.id, destinationName: editingDestination?.business_name }); handleCloseEditModal(); toast({ title: "Success", description: "Destination details updated." }); loadAdminData(); };
+  const handleOpenPermitsModal = (dest: any) => { setViewingDestinationPermits(dest); setIsPermitsModalOpen(true); };
+  const handleClosePermitsModal = () => { setViewingDestinationPermits(null); setIsPermitsModalOpen(false); };
+
+  const formatLogEntry = (log: LogEntry) => {
+    let icon = <Clock className="h-4 w-4 text-muted-foreground" />;
+    let message = <span className="text-muted-foreground">{log.profiles?.full_name || 'A user'}</span>;
+    let actionText = '';
+    switch(log.action) {
+      case 'destination_status_changed':
+        actionText = ` ${log.details.status} the destination "${log.details.destinationName}".`;
+        if (log.details.status === 'approved') icon = <CheckCircle className="h-4 w-4 text-green-500" />;
+        else icon = <XCircle className="h-4 w-4 text-red-500" />;
+        break;
+      case 'user_profile_updated':
+        actionText = ` updated the profile for "${log.details.userName}".`;
+        icon = <Edit2 className="h-4 w-4 text-blue-500" />;
+        break;
+      case 'destination_deleted':
+        actionText = ` deleted the destination "${log.details.destinationName}".`;
+        icon = <Archive className="h-4 w-4 text-destructive" />;
+        break;
+      case 'destination_details_updated':
+        actionText = ` updated the details for "${log.details.destinationName}".`;
+        icon = <Edit2 className="h-4 w-4 text-blue-500" />;
+        break;
+      case 'new_rating_submitted':
+        icon = <Star className="h-4 w-4 text-amber-500" />;
+        actionText = ` submitted a ${log.details.rating}-star review for "${log.details.destinationName}".`;
+        break;
+      default:
+        actionText = ` performed an action: ${log.action}.`;
+    }
+    return { icon, message: <>{message}{actionText}</> };
+  };
+
+  if (loadingData) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Navigation /><div className="flex-grow flex items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-forest"/></div><Footer />
+      </div>
+    );
+  }
   
   const userName = profile?.full_name || user?.email?.split('@')[0] || 'Admin';
   const totalDestinations = allDestinations.length;
   const totalUsers = allUsers.length;
 
+  const handleDeleteUser = async (userIdToDelete: string) => {
+    try {
+      const { error } = await supabase.functions.invoke('hard-delete-user', { body: { user_id_to_delete: userIdToDelete } });
+      if (error) throw error;
+      toast({ title: "User Deleted", description: "The user has been permanently removed."});
+      await logAction('user_deleted', { deletedUserId: userIdToDelete });
+      loadAdminData();
+    } catch (error: any) {
+      toast({ title: "Deletion Failed", description: error.message, variant: "destructive"});
+    }
+  };
+
+  const handleUserCreated = () => {
+    setIsCreateUserModalOpen(false);
+    loadAdminData();
+  };
+
   return (
     <>
       <div className="min-h-screen bg-background">
         <Navigation />
-        <div className="bg-gradient-to-r from-red-600 to-red-800 py-20">{/* Header */}</div>
+        <div className="bg-gradient-to-r from-red-600 to-red-800 py-20">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex items-center space-x-6">
+                    <Avatar className="w-20 h-20"><AvatarFallback className="bg-white text-red-600 text-2xl font-bold">{userName.split(' ').map(n => n[0]).join('')}</AvatarFallback></Avatar>
+                    <div>
+                        <div className="flex items-center gap-3 mb-2"><h1 className="text-4xl font-bold">Admin Dashboard</h1><Badge variant="destructive">ADMIN</Badge></div>
+                        <p className="text-xl text-white/90">Managing EcoLakbay Platform</p>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div className="py-20">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">{/* Stat Cards */}</div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">{/* Infographics */}</div>
-              
-              <div className="grid grid-cols-1 gap-8">
-                <Card className="shadow-eco">{/* Recent Activity Log with Pagination Button */}</Card>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <Card className="shadow-eco"><CardContent className="p-6 text-center"><Users className="w-8 h-8 text-blue-600 mx-auto mb-2" /><div className="text-3xl font-bold text-blue-600 mb-2">{totalUsers}</div><div className="text-sm text-muted-foreground">Total Users</div></CardContent></Card>
+                <Card className="shadow-eco"><CardContent className="p-6 text-center"><MapPin className="w-8 h-8 text-green-600 mx-auto mb-2" /><div className="text-3xl font-bold text-green-600 mb-2">{totalDestinations}</div><div className="text-sm text-muted-foreground">Loaded Destinations</div></CardContent></Card>
+                <Card className="shadow-eco"><CardContent className="p-6 text-center"><TrendingUp className="w-8 h-8 text-amber-600 mx-auto mb-2" /><div className="text-3xl font-bold text-amber-600 mb-2">{stats.totalPosts || 0}</div><div className="text-sm text-muted-foreground">Community Posts</div></CardContent></Card>
               </div>
 
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 mt-8">
-                <Card className="shadow-eco xl:col-span-3">{/* Manage All Destinations with Pagination Button */}</Card>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
+                <Card className="shadow-eco">
+                  <CardHeader><CardTitle className="text-xl text-forest">Gender Ratio</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <PieChart>
+                        <Pie dataKey="value" data={[{ name: "Male", value: allUsers.filter(u => u.gender === "Male").length }, { name: "Female", value: allUsers.filter(u => u.gender === "Female").length }, { name: "Other", value: allUsers.filter(u => u.gender && !["Male", "Female"].includes(u.gender)).length }]} cx="50%" cy="50%" outerRadius={80} label>
+                          <Cell fill="#2563eb" /><Cell fill="#db2777" /><Cell fill="#10b981" />
+                        </Pie>
+                        <Tooltip /><Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+                <Card className="shadow-eco">
+                    <CardHeader><CardTitle className="text-xl text-forest">Nationality Distribution</CardTitle></CardHeader>
+                    <CardContent>
+                        <ResponsiveContainer width="100%" height={250}>
+                            <BarChart data={Object.entries(allUsers.reduce((acc, u) => { let nat = u.nationality || "Not Specified"; acc[nat] = (acc[nat] || 0) + 1; return acc; }, {} as Record<string, number>)).map(([name, value]) => ({ name, value }))}>
+                                <XAxis dataKey="name" /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="value" fill="#16a34a" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+                <Card className="shadow-eco">
+                    <CardHeader><CardTitle className="text-xl text-forest">Top Towns / Cities</CardTitle></CardHeader>
+                    <CardContent>
+                        <ResponsiveContainer width="100%" height={250}>
+                            <BarChart data={Object.entries(allUsers.reduce((acc, u) => { if (u.town) { acc[u.town] = (acc[u.town] || 0) + 1; } return acc; }, {} as Record<string, number>)).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8)}>
+                                <XAxis dataKey="name" hide /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="value" fill="#f59e0b" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+              </div>
+              
+              <div className="grid grid-cols-1 gap-8 mb-8">
+                <Card className="shadow-eco">
+                 <CardHeader><CardTitle className="text-xl text-forest">Recent Activity Log</CardTitle></CardHeader>
+                 <CardContent>
+                   <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                     {activityLog.length > 0 ? activityLog.map(log => {
+                       const { icon, message } = formatLogEntry(log);
+                       return (
+                         <div key={log.id} className="flex items-start gap-3">
+                           <div className="mt-1">{icon}</div>
+                           <div className="flex-1">
+                             <p className="text-sm">{message}</p>
+                             <p className="text-xs text-muted-foreground">{new Date(log.created_at).toLocaleString()}</p>
+                           </div>
+                         </div>
+                       );
+                     }) : (<p className="text-center text-muted-foreground py-8">No recent activity found.</p>)}
+                   </div>
+                   {hasMoreLogs && (
+                     <div className="text-center mt-4">
+                       <Button onClick={loadMoreLogs} disabled={loadingMoreLogs} variant="outline">
+                         {loadingMoreLogs ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>) : ('Load More')}
+                       </Button>
+                     </div>
+                   )}
+                 </CardContent>
+               </Card>
+              </div>
 
-                {/* --- FIX: Restored Recent Ratings Card Content --- */}
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                <Card className="shadow-eco xl:col-span-3">
+                  <CardHeader><CardTitle className="text-xl text-forest">Manage All Destinations</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                      {allDestinations.map((dest) => (
+                        <div key={dest.id} className="flex items-center justify-between p-4 bg-gradient-card rounded-lg">
+                          <div>
+                            <p className="font-semibold">{dest.business_name}</p>
+                            <p className="text-sm text-muted-foreground">{dest.city}, {dest.province}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={statusColors[dest.status] || 'default'} className="capitalize w-24 justify-center">{dest.status}</Badge>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => handleOpenPermitsModal(dest)}><FileText className="mr-2 h-4 w-4" />View Permits</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleOpenEditModal(dest)}><Edit2 className="mr-2 h-4 w-4" />Update Details</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleStatusUpdate(dest.id, 'approved', dest.business_name)} disabled={dest.status === 'approved'}>Approve</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleStatusUpdate(dest.id, 'rejected', dest.business_name)} disabled={dest.status === 'rejected'}>Reject</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleStatusUpdate(dest.id, 'archived', dest.business_name)} className="text-destructive" disabled={dest.status === 'archived'}><Archive className="mr-2 h-4 w-4" />Archive</DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {hasMoreDestinations && (
+                      <div className="text-center mt-4">
+                        <Button onClick={loadMoreDestinations} disabled={loadingMoreDestinations} variant="outline">
+                          {loadingMoreDestinations ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>) : ('Load More Destinations')}
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
                 <Card className="shadow-eco">
                   <CardHeader><CardTitle className="text-xl text-forest">Recent Ratings</CardTitle></CardHeader>
                   <CardContent>
@@ -228,20 +447,19 @@ const AdminDashboard = () => {
                                           <p className="text-sm text-muted-foreground">by {rating.profiles?.full_name}</p>
                                       </div>
                                       <div className="flex items-center gap-1">
+                                          <Star className="h-4 w-4 text-amber-500" />
                                           <span className="text-sm font-medium">{rating.overall_score}/5</span>
                                       </div>
                                   </div>
                                   <p className="text-xs text-muted-foreground">{new Date(rating.created_at).toLocaleDateString()}</p>
-                                  {rating.comments && <p className="text-sm mt-2 italic line-clamp-2">{rating.comments}</p>}
+                                  {rating.comments && <p className="text-sm mt-2 italic line-clamp-2">"{rating.comments}"</p>}
                               </div>
                           ))}
                           {allRatings.length === 0 && <p className="text-center text-muted-foreground py-8">No ratings yet</p>}
                       </div>
                   </CardContent>
                 </Card>
-                {/* --- END FIX --- */}
 
-                {/* --- FIX: Restored All Users Card Content --- */}
                 <Card className="shadow-eco xl:col-span-2">
                   <CardHeader>
                     <div className="flex justify-between items-center">
@@ -252,7 +470,7 @@ const AdminDashboard = () => {
                     </div>
                     <div className="flex items-center space-x-2 pt-4">
                         <Search className="h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Search users..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="max-w-sm" />
+                        <Input placeholder="Search users by name or email..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="max-w-sm" />
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -301,12 +519,12 @@ const AdminDashboard = () => {
                     </div>
                   </CardContent>
                 </Card>
-                {/* --- END FIX --- */}
               </div>
             </div>
         </div>
         <Footer />
       </div>
+      
       {/* Modals */}
       <ViewPermitsModal isOpen={isPermitsModalOpen} onClose={handleClosePermitsModal} destination={viewingDestinationPermits} />
       <CreateUserModal isOpen={isCreateUserModalOpen} onClose={() => setIsCreateUserModalOpen(false)} onUserCreated={handleUserCreated} />
