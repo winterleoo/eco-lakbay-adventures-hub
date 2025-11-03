@@ -23,24 +23,27 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
+import { Edit2, Archive, FileText, Download, Loader2, Star, CheckCircle, XCircle } from "lucide-react";
 interface Destination {
   id: string;
   business_name: string;
   city: string;
   province: string;
   status: 'pending' | 'approved' | 'rejected' | 'archived';
-  // This will hold the joined profile data of the admin
   admin_profile: {
     full_name: string;
   } | null;
 }
 const statusColors: { [key: string]: 'default' | 'secondary' | 'destructive' | 'outline' } = {
-  pending: 'secondary',
-  approved: 'default',
-  rejected: 'destructive',
-  archived: 'outline',
+  pending: 'secondary', approved: 'default', rejected: 'destructive', archived: 'outline',
 };
+interface LogEntry {
+  id: number;
+  created_at: string;
+  action: string;
+  details: { [key: string]: any; };
+  profiles: { full_name: string; } | null;
+}
 
 const SuperAdminDashboard = () => {
   const { user } = useAuth();
@@ -57,6 +60,7 @@ const SuperAdminDashboard = () => {
   const [userGrowthChartData, setUserGrowthChartData] = useState<any[]>([]);
   const [destinations, setDestinations] = useState<Destination[]>([]); // --- MODIFIED ---
   const [destinationStatusChartData, setDestinationStatusChartData] = useState<any[]>([]);
+    const [activityLog, setActivityLog] = useState<LogEntry[]>([]);
 
   const isSuperAdmin = user?.email === 'johnleomedina@gmail.com' && isAdmin;
 
@@ -67,75 +71,61 @@ const SuperAdminDashboard = () => {
   }, [isSuperAdmin]);
 
    // --- MODIFIED ---: Modify the destinations fetch query
-  const fetchAllData = async () => {
+     const fetchAllData = async () => {
+        setLoading(true); // Assuming you have setLoading defined
         try {
-            // Step 1: Fetch all profiles.
-            const { data: profiles, error: profilesError } = await supabase
-                .from('profiles')
-                .select('*')
-                .order('full_name', { ascending: true });
-            
+            // Fetch users and roles
+            const { data: profiles, error: profilesError } = await supabase.from('profiles').select('*').order('full_name', { ascending: true });
             if (profilesError) throw profilesError;
-
-            // Step 2: Fetch all user roles.
-            const { data: userRoles, error: rolesError } = await supabase
-                .from('user_roles')
-                .select('user_id, role');
-
+            const { data: userRoles, error: rolesError } = await supabase.from('user_roles').select('user_id, role');
             if (rolesError) throw rolesError;
-            
-            // Step 3: Combine them in JavaScript.
-            // This bypasses the faulty Supabase join cache completely.
-            const usersWithRoles = profiles.map(profile => {
-                const roleInfo = userRoles.find(ur => ur.user_id === profile.user_id);
-                return {
-                    ...profile,
-                    role: roleInfo?.role || 'user',
-                };
-            });
+            const usersWithRoles = profiles.map(p => ({ ...p, role: userRoles.find(ur => ur.user_id === p.user_id)?.role || 'user' }));
             setUsers(usersWithRoles);
 
-            // Fetch other data in parallel. These queries are working fine.
-            const { data: destData, error: destError } = await supabase
-                .from('destinations')
-                .select(`*, admin_profile:admin_id ( full_name )`)
-                .order('created_at', { ascending: false });
-            if (destError) throw destError;
-               console.log("Fetched Destinations Data:", destData); 
-            setDestinations(destData as Destination[] || []);
+            // Fetch destinations and logs in parallel for efficiency
+            const [destResponse, logResponse] = await Promise.all([
+                supabase.from('destinations').select(`*, admin_profile:admin_id(full_name)`).order('created_at', { ascending: false }),
+                supabase.from('audit_log').select(`*, profiles(full_name)`).order('created_at', { ascending: false }).limit(20)
+            ]);
 
-            // Stats and Chart data fetches can remain the same
-            await fetchStats();
-            await fetchChartData(profiles || []); // Pass the raw profiles data here
+            if (destResponse.error) throw destResponse.error;
+            setDestinations(destResponse.data as Destination[] || []);
+
+            if (logResponse.error) throw logResponse.error;
+            setActivityLog(logResponse.data || []);
             
+            // Fetch stats and charts
+            await fetchStats();
+            await fetchChartData(profiles || []);
+
         } catch (error: any) {
-            console.error('Error fetching dashboard data:', error);
-            // This will now show the REAL error if one of the individual queries fails.
-            toast({ title: "Error", description: `Failed to load all dashboard data: ${error.message}`, variant: "destructive" });
+            toast({ title: "Error fetching data", description: error.message, variant: "destructive" });
+        } finally {
+            setLoading(false); // Assuming you have this state
         }
     };
-
-  const handleStatusUpdate = async (destinationId: string, status: Destination['status']) => {
-    if (!user) return; // Guard clause
     
-    try {
-      const { error } = await supabase
-        .from('destinations')
-        .update({ 
-            status, 
-            updated_at: new Date().toISOString(),
-            admin_id: user.id // <-- THIS IS THE KEY: Save the current admin's ID
-        })
-        .eq('id', destinationId);
-      
-      if (error) throw error;
-      toast({ title: "Success", description: `Destination has been ${status}.` });
-      // We don't need a separate logAction here anymore, as the data is stored directly.
-      fetchAllData(); // Refresh all data to show the changes
-    } catch (error: any) {
-      toast({ title: "Update Failed", description: `Could not update status: ${error.message}`, variant: "destructive" });
-    }
-  };
+    useEffect(() => {
+        if (isSuperAdmin) fetchAllData();
+    }, [isSuperAdmin]);
+     const formatLogEntry = (log: LogEntry) => {
+        let icon = <Clock className="h-4 w-4 text-muted-foreground" />;
+        let message = <span>{log.profiles?.full_name || 'A user'}</span>;
+        let actionText = '';
+
+        switch(log.action) {
+            case 'destination_status_changed':
+                actionText = ` ${log.details.status} "${log.details.destinationName}".`;
+                if (log.details.status === 'approved') icon = <CheckCircle className="h-4 w-4 text-green-500" />;
+                else icon = <XCircle className="h-4 w-4 text-red-500" />;
+                break;
+            // ... include all your other cases for different log types
+            default:
+                actionText = ` performed action: ${log.action}.`;
+        }
+        return { icon, message: <>{message}{actionText}</> };
+    };
+
 
   const fetchUsers = async () => {
     const { data: profiles, error: profilesError } = await supabase.from('profiles').select('*').order('full_name', { ascending: true });
@@ -284,42 +274,29 @@ const SuperAdminDashboard = () => {
             </Card>
           </div>
 
-             <Card>
-            <CardHeader>
-              <CardTitle>Destination Management</CardTitle>
-              {/* You might want a search bar for destinations here in the future */}
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4 max-h-[600px] overflow-y-auto">
-                {destinations.map((dest) => (
-                    <div key={dest.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <p className="font-medium">{dest.business_name}</p>
-                        <p className="text-sm text-muted-foreground">{dest.city}, {dest.province}</p>
-                        {/* --- NEW ---: Display who took the last action */}
-                        {dest.status !== 'pending' && dest.admin_profile && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Last action by: <strong>{dest.admin_profile.full_name}</strong>
-                            </p>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Badge variant={statusColors[dest.status] || 'default'} className="capitalize w-24 justify-center">{dest.status}</Badge>
-                        {/* The Dropdown Menu for actions is now simpler */}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button size="icon" variant="ghost"><MoreHorizontal className="h-4 w-4"/></Button></DropdownMenuTrigger>
-                            <DropdownMenuContent>
-                                <DropdownMenuItem onClick={() => handleStatusUpdate(dest.id, 'approved')} disabled={dest.status === 'approved'}>Approve</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleStatusUpdate(dest.id, 'rejected')} disabled={dest.status === 'rejected'}>Reject</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleStatusUpdate(dest.id, 'archived')} className="text-destructive">Archive</DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                              {/* Activity Log takes up 1/3 of the width */}
+                        <div className="lg:col-span-1 space-y-8">
+                           <Card>
+                               <CardHeader><CardTitle>Recent Activity Log</CardTitle></CardHeader>
+                               <CardContent>
+                                   <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                                       {activityLog.length > 0 ? activityLog.map(log => {
+                                           const { icon, message } = formatLogEntry(log);
+                                           return (
+                                               <div key={log.id} className="flex items-start gap-3 text-sm">
+                                                   <div className="mt-1">{icon}</div>
+                                                   <div className="flex-1">
+                                                       <p>{message}</p>
+                                                       <p className="text-xs text-muted-foreground">{new Date(log.created_at).toLocaleString()}</p>
+                                                   </div>
+                                               </div>
+                                           );
+                                       }) : (<p className="text-center text-muted-foreground py-8">No recent activity.</p>)}
+                                   </div>
+                               </CardContent>
+                            </Card>
+                        </div>
+
 
           <Card>
             <CardHeader>
