@@ -25,7 +25,7 @@ serve(async (req)=>{
     const { data: destination, error: destError } = await supabaseAdmin.from('destinations').select(`
         business_name,
         owner_id,
-        profiles ( email, full_name )
+         profiles:owner_id ( email, full_name )
       `).eq('id', destinationId).single();
     if (destError || !destination) {
       throw new Error(`Could not find destination or owner info: ${destError?.message}`);
