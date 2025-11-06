@@ -44,6 +44,18 @@ interface LogEntry {
   } | null;
 }
 
+interface Destination {
+  id: string;
+  business_name: string;
+  city: string;
+  province: string;
+  status: string;
+  destination_permits: any[];
+  owner_profile: {
+      full_name: string;
+  } | null;
+}
+
 const statusColors: { [key: string]: 'default' | 'secondary' | 'destructive' | 'outline' } = {
   pending: 'secondary', approved: 'default', rejected: 'destructive', archived: 'outline',
 };
@@ -108,9 +120,18 @@ const AdminDashboard = () => {
       const { data: profileData } = await supabase.from('profiles').select('*').eq('user_id', user!.id).single();
       setProfile(profileData);
 
-      const { data: destData, error: destError } = await supabase.from('destinations').select('*, destination_permits(*)').order('created_at', { ascending: false }).range(0, PAGE_SIZE - 1);
-      if (destError) throw destError;
-      setAllDestinations(destData || []);
+      const { data: destData, error: destError } = await supabase
+                .from('destinations')
+                .select(`
+                    *,
+                    destination_permits(*),
+                    owner_profile:owner_id ( full_name )
+                `)
+                .order('created_at', { ascending: false })
+                .range(0, PAGE_SIZE - 1);
+            
+            if (destError) throw destError;
+            setAllDestinations(destData || []);
       if ((destData || []).length < PAGE_SIZE) setHasMoreDestinations(false);
       
       const { data: usersData, error: usersError } = await supabase.from('profiles').select('*').order('full_name', { ascending: true });
@@ -171,7 +192,16 @@ const AdminDashboard = () => {
     const from = destinationsPage * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
     
-    const { data: newDests, error } = await supabase.from('destinations').select('*, destination_permits(*)').order('created_at', { ascending: false }).range(from, to);
+const { data: newDests, error } = await supabase
+            .from('destinations')
+            .select(`
+                *,
+                destination_permits(*),
+                owner_profile:owner_id ( full_name )
+            `)
+            .order('created_at', { ascending: false })
+            .range(from, to);
+
     if (error) {
       toast({ title: "Error", description: "Could not load more destinations.", variant: "destructive" });
     } else if (newDests) {
@@ -431,6 +461,11 @@ const AdminDashboard = () => {
                           <div>
                             <p className="font-semibold">{dest.business_name}</p>
                             <p className="text-sm text-muted-foreground">{dest.city}, {dest.province}</p>
+                             {dest.owner_profile && (
+                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                        Registered by: <strong>{dest.owner_profile.full_name}</strong>
+                                                    </p>
+                                                )}
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge variant={statusColors[dest.status] || 'default'} className="capitalize w-24 justify-center">{dest.status}</Badge>
