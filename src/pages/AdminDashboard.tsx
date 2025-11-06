@@ -186,19 +186,60 @@ const AdminDashboard = () => {
     if (user) loadAdminData();
   }, [user]);
 
-  const handleStatusUpdate = async (destinationId: string, status: 'approved' | 'rejected' | 'archived', destinationName: string) => {
+ const handleStatusUpdate = async (destinationId: string, status: 'approved' | 'rejected' | 'archived', destinationName: string) => {
+    // We keep your logging at the top. This is correct.
     await logAction('destination_status_changed', { destinationId, destinationName, status });
-    const { error } = await supabase.from('destinations').update({ status, updated_at: new Date().toISOString() }).eq('id', destinationId);
+
+    // Step 1: Update the database
+    const { error } = await supabase
+        .from('destinations')
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('id', destinationId);
+
     if (error) {
-      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Success", description: `Destination has been ${status}.` });
-      setAllDestinations(prevDests => prevDests.map(dest => 
-        dest.id === destinationId ? { ...dest, status } : dest
-      ));
-      // Refresh the active count when a status changes
-      const { count } = await supabase.from('destinations').select('id', { count: 'exact', head: true }).eq('status', 'approved');
-      setStats(prevStats => ({ ...prevStats, totalActiveDestinations: count || 0 }));
+        toast({ title: "Update Failed", description: error.message, variant: "destructive" });
+        return; // Stop the function if the database update fails
+    }
+    
+    // If the database update is successful:
+    toast({ title: "Success", description: `Destination has been ${status}.` });
+
+    // Step 2: Optimistically update the UI state. Your existing code for this is correct.
+    setAllDestinations(prevDests => 
+        prevDests.map(dest => 
+            dest.id === destinationId ? { ...dest, status } : dest
+        )
+    );
+
+    // Step 3: Refresh the stats. Your existing code for this is correct.
+    const { count } = await supabase
+        .from('destinations')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'approved');
+    setStats(prevStats => ({ ...prevStats, totalActiveDestinations: count || 0 }));
+    
+    // --- THIS IS THE NEW PART ---
+    // Step 4: After all client-side updates are done, send the email notification.
+    if (status === 'approved' || status === 'rejected') {
+        // Show a temporary "sending email" toast
+        const sendingToast = toast({ title: "Sending Notification...", description: "Notifying the destination owner by email." });
+        
+        const { error: functionError } = await supabase.functions.invoke('send-status-email', {
+            body: { destinationId, status }
+        });
+
+        // Dismiss the "sending" toast
+        sendingToast.dismiss();
+
+        if (functionError) {
+            toast({
+                title: "Email Failed",
+                description: `Status was updated, but the email could not be sent. Error: ${functionError.message}`,
+                variant: "destructive"
+            });
+        } else {
+            toast({ title: "Notification Sent!", description: "The destination owner has been notified." });
+        }
     }
   };
 
