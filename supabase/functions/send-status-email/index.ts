@@ -73,7 +73,7 @@ serve(async (req)=>{
         'Authorization': `Bearer ${RESEND_API_KEY}`
       },
       body: JSON.stringify({
-        from: 'EcoLakbay <no-reply@yourverifieddomain.com>',
+        from: 'EcoLakbay <no-reply@ecolakbay.com>',
         to: [
           ownerEmail
         ],
