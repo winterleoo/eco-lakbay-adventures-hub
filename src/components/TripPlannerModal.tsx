@@ -196,7 +196,7 @@ return (
           <AlertTriangle className="h-4 w-4 !text-amber-600" />
           <AlertTitle className="font-semibold !text-amber-800 dark:!text-amber-200">AI-Generated Content</AlertTitle>
           <AlertDescription className="!text-amber-700 dark:!text-amber-300">
-            This itinerary is based on the generative knowledge of the AI and was not fed with real-time data from EcoLakbay's partners. Please verify details with establishments before your trip.
+            This itinerary is based on the generative knowledge of the AI. Please verify details with establishments before your trip.
           </AlertDescription>
         </Alert>      
         {/* --- MODIFIED ---: The button layout is updated */}
