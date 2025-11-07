@@ -8,7 +8,7 @@ const allowedOrigins = [
   'http://localhost:5173'
 ];
 serve(async (req)=>{
-   const origin = req.headers.get('Origin') || '';
+  const origin = req.headers.get('Origin') || '';
   const corsHeaders = {
     'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -19,29 +19,38 @@ serve(async (req)=>{
       headers: corsHeaders
     });
   }
-   try {
+  try {
     const { user_id_to_delete } = await req.json();
     if (!user_id_to_delete) {
       throw new Error("User ID to delete is required.");
     }
-    
-    const adminSupabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-    
-    // This is the ONLY action needed now.
-    const { error } = await adminSupabase.auth.admin.deleteUser(user_id_to_delete);
-    
+    // Create the admin client - this is now safe
+    const adminSupabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+    // Now, simply delete the user from the auth schema.
+    // The TRIGGER we created will handle deleting from all other tables automatically.
+   const { error } = await adminSupabase.auth.admin.deleteUser(user_id_to_delete);
     if (error) {
-      // The error object from Supabase will now be much more specific if it fails.
       throw error;
     }
-    
-    return new Response(JSON.stringify({ message: "User deleted successfully." }), { /* ... */ });
-
+    return new Response(JSON.stringify({
+      message: "User deleted successfully."
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 200
+    });
   } catch (error) {
     console.error('Error in hard-delete-user function:', error.message);
-    return new Response(JSON.stringify({ error: error.message }), { /* ... */ });
+    return new Response(JSON.stringify({
+      error: error.message
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 500
+    });
   }
 });
