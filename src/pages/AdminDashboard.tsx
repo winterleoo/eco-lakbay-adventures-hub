@@ -338,16 +338,30 @@ const { data: newDests, error } = await supabase
   const totalUsers = allUsers.length;
 
   const handleDeleteUser = async (userIdToDelete: string) => {
-    try {
-      const { error } = await supabase.functions.invoke('hard-delete-user', { body: { user_id_to_delete: userIdToDelete } });
-      if (error) throw error;
-      toast({ title: "User Deleted", description: "The user has been permanently removed."});
-      await logAction('user_deleted', { deletedUserId: userIdToDelete });
-      loadAdminData();
-    } catch (error: any) {
-      toast({ title: "Deletion Failed", description: error.message, variant: "destructive"});
-    }
-  };
+        try {
+            // No need to call the Edge Function for a regular admin, we can use RPC if RLS is set up.
+            // But since you have a hard-delete function, we will use it.
+            const { error } = await supabase.functions.invoke('hard-delete-user', { 
+                body: { user_id_to_delete: userIdToDelete } 
+            });
+
+            if (error) throw error;
+            
+            toast({ title: "User Deleted", description: "The user has been permanently removed."});
+
+            // Optimistic UI Update: Remove the user from the local state
+            // This triggers a re-render with the correct data, avoiding the crash.
+            setAllUsers(currentUsers => currentUsers.filter(u => u.user_id !== userIdToDelete));
+            
+            // Optional: Log the action
+            await logAction('user_deleted', { deletedUserId: userIdToDelete });
+
+            // We no longer need to call loadAdminData() here, which prevents the race condition.
+
+        } catch (error: any) {
+            toast({ title: "Deletion Failed", description: error.message, variant: "destructive"});
+        }
+    };
 
   const handleUserCreated = () => {
     setIsCreateUserModalOpen(false);
@@ -570,7 +584,10 @@ const { data: newDests, error } = await supabase
                               </AlertDialogTrigger>
                               <AlertDialogContent>
                                 <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action will permanently delete <strong className="text-foreground">{u.full_name || u.email}</strong> and all their data.</AlertDialogDescription></AlertDialogHeader>
-                                <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteUser(u.user_id)} className="bg-destructive hover:bg-destructive/90">Confirm Delete</AlertDialogAction></AlertDialogFooter>
+                                <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDeleteUser(u.user_id)} className="bg-destructive hover:bg-destructive/90">
+                                                        Confirm Delete
+                                                    </AlertDialogAction></AlertDialogFooter>
                               </AlertDialogContent>
                             </AlertDialog>
                           </div>
