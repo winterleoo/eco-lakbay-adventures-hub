@@ -1,47 +1,66 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2/dist/module/index.js";
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+
+// Your CORS handling and secrets reading are correct.
+const allowedOrigins = [
+  'https://www.eco-lakbay.com',
+  'https://eco-lakbay.com',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
 
 serve(async (req) => {
-  // CORS logic for preflight request
+  const origin = req.headers.get('Origin') || '';
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+  
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: { 
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
-    } });
+    return new Response('ok', { headers: corsHeaders });
   }
-    const url = Deno.env.get('SUPABASE_URL');
-    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-
-    console.log("SUPABASE_URL found:", !!url); // Will log true or false
-    console.log("SUPABASE_SERVICE_ROLE_KEY found:", !!key); // Will log true or fa
 
   try {
+    // --- STEP 1: Read secrets directly ---
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    if (!supabaseUrl || !serviceRoleKey) {
+        throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY secrets.");
+    }
+    
     const { user_id_to_delete } = await req.json();
     if (!user_id_to_delete) {
       throw new Error("User ID to delete is required.");
     }
-    
-    // Create a Supabase client with the SERVICE_ROLE_KEY to bypass RLS
-    const adminSupabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-    
-    // Perform the deletion
-    const { data, error } = await adminSupabase.auth.admin.deleteUser(user_id_to_delete);
-    
-    if (error) {
-      throw error;
-    }
-    
-    return new Response(JSON.stringify({ message: "User deleted successfully." }), {
-      headers: { 'Content-Type': 'application/json' },
-      status: 200,
+
+    // --- STEP 2: Manually call the Supabase Auth Admin API using fetch ---
+    // This bypasses the createClient library entirely.
+    const response = await fetch(`${supabaseUrl}/auth/v1/admin/users/${user_id_to_delete}`, {
+        method: 'DELETE',
+        headers: {
+            'apikey': serviceRoleKey,
+            'Authorization': `Bearer ${serviceRoleKey}`,
+        },
     });
+
+    // --- STEP 3: Check the response from the API ---
+    if (!response.ok) {
+        const errorData = await response.json();
+        // The error message from the API will be much more specific now.
+        throw new Error(`Failed to delete user: ${errorData.msg || response.statusText}`);
+    }
+
+    return new Response(JSON.stringify({ message: "User deleted successfully." }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
+    });
+
   } catch (error) {
+    console.error('Error in hard-delete-user function:', error.message);
     return new Response(JSON.stringify({ error: error.message }), {
-      headers: { 'Content-Type': 'application/json' },
-      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500
     });
   }
-})
+});
