@@ -9,6 +9,11 @@ serve(async (req) => {
         'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
     } });
   }
+    const url = Deno.env.get('SUPABASE_URL');
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    console.log("SUPABASE_URL found:", !!url); // Will log true or false
+    console.log("SUPABASE_SERVICE_ROLE_KEY found:", !!key); // Will log true or fa
 
   try {
     const { user_id_to_delete } = await req.json();
