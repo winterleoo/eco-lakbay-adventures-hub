@@ -337,29 +337,38 @@ const { data: newDests, error } = await supabase
   const userName = profile?.full_name || user?.email?.split('@')[0] || 'Admin';
   const totalUsers = allUsers.length;
 
-  const handleDeleteUser = async (userIdToDelete: string) => {
+   const handleDeleteUser = async (userToDelete: { user_id: string; full_name?: string; email: string; }) => {
+        // Prevent Super Admin from being deleted
+        if (userToDelete.email === 'johnleomedina@gmail.com') {
+          toast({ title: "Action Forbidden", description: "The Super Admin account cannot be deleted.", variant: "destructive" });
+          return;
+        }
+
         try {
-            // No need to call the Edge Function for a regular admin, we can use RPC if RLS is set up.
-            // But since you have a hard-delete function, we will use it.
-            const { error } = await supabase.functions.invoke('hard-delete-user', { 
-                body: { user_id_to_delete: userIdToDelete } 
+            // We now call the database function directly using rpc()
+            const { data, error } = await supabase.rpc('hard_delete_user', {
+                user_id_to_delete: userToDelete.user_id
             });
 
-            if (error) throw error;
-            
-            toast({ title: "User Deleted", description: "The user has been permanently removed."});
+            if (error) {
+                // This error will be the specific PostgreSQL error, much more informative!
+                // It will be "Permission denied..." if a non-admin somehow calls this.
+                throw error;
+            }
 
-            // Optimistic UI Update: Remove the user from the local state
-            // This triggers a re-render with the correct data, avoiding the crash.
-            setAllUsers(currentUsers => currentUsers.filter(u => u.user_id !== userIdToDelete));
-            
-            // Optional: Log the action
-            await logAction('user_deleted', { deletedUserId: userIdToDelete });
+            toast({ title: "User Deleted", description: `${userToDelete.full_name || userToDelete.email} has been permanently removed.` });
 
-            // We no longer need to call loadAdminData() here, which prevents the race condition.
+            // Optimistic UI Update: Remove the user from the local state for an instant refresh
+            setAllUsers(currentUsers => currentUsers.filter(u => u.user_id !== userToDelete.user_id));
+            
+            // Log the action
+            await logAction('user_deleted', { 
+                deletedUserId: userToDelete.user_id,
+                deletedUserName: userToDelete.full_name || userToDelete.email
+            });
 
         } catch (error: any) {
-            toast({ title: "Deletion Failed", description: error.message, variant: "destructive"});
+            toast({ title: "Deletion Failed", description: error.message, variant: "destructive" });
         }
     };
 
@@ -585,7 +594,7 @@ const { data: newDests, error } = await supabase
                               <AlertDialogContent>
                                 <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action will permanently delete <strong className="text-foreground">{u.full_name || u.email}</strong> and all their data.</AlertDialogDescription></AlertDialogHeader>
                                 <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleDeleteUser(u.user_id)} className="bg-destructive hover:bg-destructive/90">
+                                  <AlertDialogAction onClick={() => handleDeleteUser(u)}  className="bg-destructive hover:bg-destructive/90">
                                                         Confirm Delete
                                                     </AlertDialogAction></AlertDialogFooter>
                               </AlertDialogContent>
