@@ -13,7 +13,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-// --- MODIFIED ---: Added necessary icons
 import { Plus, Heart, MessageSquare, Share2, Send, MoreVertical, Edit, Trash2 } from "lucide-react";
 import {
   Dialog,
@@ -21,7 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-// --- NEW ---: Imports for the action menu and delete confirmation dialog
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,7 +49,7 @@ interface Post {
   comments_count?: number;
   profiles: Profile | null;
   userLiked: boolean;
-  image_url?: string; // Add this line
+  image_url?: string;
 }
 
 interface Profile {
@@ -88,6 +86,9 @@ const Community = () => {
   const [comments, setComments] = useState<{ [key: string]: Comment[] }>({});
   const [newComment, setNewComment] = useState<{ [key: string]: string }>({});
   const [showComments, setShowComments] = useState<{ [key: string]: boolean }>({});
+
+  // --- NEW ---: State to hold the URL of the image to be enlarged.
+  const [enlargedImageUrl, setEnlargedImageUrl] = useState<string | null>(null);
 
   // Modal-specific state
   const [viewAllEventsOpen, setViewAllEventsOpen] = useState(false);
@@ -145,7 +146,6 @@ const Community = () => {
               ...post,
               profiles: profilesData?.find((p) => p.user_id === post.author_id) || null,
               userLiked: userLikes.includes(post.id),
-              // We overwrite the original array-of-objects with the correct number
               comments_count: comments_count,
               likes_count: likes_count,
             };
@@ -303,7 +303,6 @@ const Community = () => {
       
       toast({ title: "Post deleted", description: "The post has been permanently removed." });
       
-      // Update the UI instantly by filtering out the deleted post
       setPosts(currentPosts => currentPosts.filter(p => p.id !== postId));
     } catch (error: any) {
       toast({ title: "Error deleting post", description: error.message, variant: "destructive"});
@@ -341,7 +340,6 @@ const Community = () => {
                       <div><p className="font-semibold">{post.profiles?.full_name}</p><p className="text-xs text-muted-foreground">{formatDate(post.created_at)}</p></div>
                     </div>
                     
-                    {/* Permission check: Only show menu to author or admin */}
                     {(isAdmin || user?.id === post.author_id) && (
                       <AlertDialog>
                         <DropdownMenu>
@@ -362,7 +360,6 @@ const Community = () => {
                           </DropdownMenuContent>
                         </DropdownMenu>
 
-                        {/* This is the content for the delete confirmation dialog */}
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
@@ -386,10 +383,12 @@ const Community = () => {
                   {post.image_url && (
                       <div className="my-4">
                           <img 
-                             src={post.image_url} 
+                              src={post.image_url} 
                               alt={post.title}
-                              className="w-full h-auto max-h-96 object-cover rounded-lg border" 
-                                />
+                              // --- MODIFIED ---: Added onClick, cursor-pointer, and a hover effect
+                              onClick={() => setEnlargedImageUrl(post.image_url)}
+                              className="w-full h-auto max-h-96 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity" 
+                          />
                        </div>
                   )}
                   <p className="text-muted-foreground mb-4 whitespace-pre-wrap">{post.content}</p>
@@ -411,44 +410,42 @@ const Community = () => {
         </main>
         
         <aside className="space-y-6">
-  {/* Hide Upcoming Events card */}
-  {false && (
-    <Card>
-      <CardHeader><CardTitle>Upcoming Events</CardTitle></CardHeader>
-      <CardContent>
-        {upcomingEventsPreview.map((e, i) => (
-          <div key={i} className="border-l-2 border-forest pl-3 mb-3 last:mb-0">
-            <p className="font-medium text-sm">{e.title}</p>
-            <p className="text-xs text-muted-foreground">{e.date} • {e.location}</p>
-            <p className="text-xs text-amber">{e.participants} joining</p>
-          </div>
-        ))}
-        <Button variant="outline" className="w-full mt-4" onClick={() => setViewAllEventsOpen(true)}>
-          View All Events
-        </Button>
-      </CardContent>
-    </Card>
-  )}
+            {false && (
+                <Card>
+                <CardHeader><CardTitle>Upcoming Events</CardTitle></CardHeader>
+                <CardContent>
+                    {upcomingEventsPreview.map((e, i) => (
+                    <div key={i} className="border-l-2 border-forest pl-3 mb-3 last:mb-0">
+                        <p className="font-medium text-sm">{e.title}</p>
+                        <p className="text-xs text-muted-foreground">{e.date} • {e.location}</p>
+                        <p className="text-xs text-amber">{e.participants} joining</p>
+                    </div>
+                    ))}
+                    <Button variant="outline" className="w-full mt-4" onClick={() => setViewAllEventsOpen(true)}>
+                    View All Events
+                    </Button>
+                </CardContent>
+                </Card>
+            )}
 
-  {/* Keep the Green Champions card visible */}
-  <Card>
-    <CardHeader><CardTitle>Green Champions</CardTitle></CardHeader>
-    <CardContent>
-      {topProfiles.map((p, i) => (
-        <div key={p.user_id} className="flex justify-between items-center mb-2 last:mb-0">
-          <div className="flex items-center gap-2">
-            <span className="w-6 text-center">{getRankIndicator(i)}</span>
-            <span>{p.full_name}</span>
-          </div>
-          <Badge variant="gold">{p.points || 0} pts</Badge>
-        </div>
-      ))}
-      <Button variant="eco" className="w-full mt-4" onClick={() => setViewLeaderboardOpen(true)}>
-        View Leaderboard
-      </Button>
-    </CardContent>
-  </Card>
-</aside>
+            <Card>
+                <CardHeader><CardTitle>Green Champions</CardTitle></CardHeader>
+                <CardContent>
+                {topProfiles.map((p, i) => (
+                    <div key={p.user_id} className="flex justify-between items-center mb-2 last:mb-0">
+                    <div className="flex items-center gap-2">
+                        <span className="w-6 text-center">{getRankIndicator(i)}</span>
+                        <span>{p.full_name}</span>
+                    </div>
+                    <Badge variant="gold">{p.points || 0} pts</Badge>
+                    </div>
+                ))}
+                <Button variant="eco" className="w-full mt-4" onClick={() => setViewLeaderboardOpen(true)}>
+                    View Leaderboard
+                </Button>
+                </CardContent>
+            </Card>
+        </aside>
       </div>
       <Footer />
       
@@ -456,6 +453,19 @@ const Community = () => {
       <CreatePostModal open={createPostModalOpen} onOpenChange={setCreatePostModalOpen} onPostCreated={fetchPostsAndProfiles} />
       <EditPostModal open={editPostModalOpen} onOpenChange={setEditPostModalOpen} onPostUpdated={fetchPostsAndProfiles} post={editingPost} />
       <CreateEventModal open={createEventModalOpen} onOpenChange={setCreateEventModalOpen} onEventCreated={() => { fetchAllEvents(); fetchJoinedEvents(); }} />
+
+      {/* --- NEW ---: Dialog for displaying the enlarged image */}
+      <Dialog open={!!enlargedImageUrl} onOpenChange={() => setEnlargedImageUrl(null)}>
+        <DialogContent className="p-0 border-0 max-w-5xl bg-transparent shadow-none outline-none">
+            {enlargedImageUrl && (
+                 <img
+                    src={enlargedImageUrl}
+                    alt="Enlarged post image"
+                    className="w-full h-auto max-h-[90vh] object-contain rounded-lg"
+                />
+            )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={viewAllEventsOpen} onOpenChange={setViewAllEventsOpen}>
         <DialogContent className="sm:max-w-md md:max-w-lg">
