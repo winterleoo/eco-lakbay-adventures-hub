@@ -25,10 +25,10 @@ interface PermitUploadProps {
 
 const permitTypes = [
   { value: 'business_permit', label: 'Business Permit', required: true },
-  { value: 'tourism_permit', label: 'Tourism Permit', required: true },
+  { value: 'tourism_permit', label: 'Tourism Permit', required: false },
   { value: 'environmental_clearance', label: 'Environmental Clearance', required: false },
   { value: 'fire_safety', label: 'Fire Safety Certificate', required: true },
-  { value: 'health_permit', label: 'Health Permit (for F&B)', required: false },
+  { value: 'health_permit', label: 'Health Permit (for F&B)', required: true },
   { value: 'other', label: 'Other Permits', required: false }
 ];
 
