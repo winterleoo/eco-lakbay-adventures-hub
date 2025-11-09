@@ -61,7 +61,13 @@ const SuperAdminDashboard = () => {
   const [destinations, setDestinations] = useState<Destination[]>([]); // --- MODIFIED ---
   const [destinationStatusChartData, setDestinationStatusChartData] = useState<any[]>([]);
     const [activityLog, setActivityLog] = useState<LogEntry[]>([]);
-     const [loadingData, setLoadingData] = useState(true); 
+  
+
+     const [statusChangeLog, setStatusChangeLog] = useState<LogEntry[]>([]);
+    const [logPage, setLogPage] = useState(1);
+    const [hasMoreLogs, setHasMoreLogs] = useState(true);
+    const [loadingMoreLogs, setLoadingMoreLogs] = useState(false);
+    const [loadingData, setLoadingData] = useState(true);
 
   const isSuperAdmin = user?.email === 'johnleomedina@gmail.com' && isAdmin;
 
@@ -73,6 +79,8 @@ const SuperAdminDashboard = () => {
 
    // --- MODIFIED ---: Modify the destinations fetch query
      const fetchAllData = async () => {
+      setLogPage(1); // Reset pagination on full refresh
+            setHasMoreLogs(true);
         setLoadingData(true); // Assuming you have setLoading defined
         try {
             // Fetch users and roles
@@ -84,16 +92,23 @@ const SuperAdminDashboard = () => {
             setUsers(usersWithRoles);
 
             // Fetch destinations and logs in parallel for efficiency
-            const [destResponse, logResponse] = await Promise.all([
+            const [destResponse, logResponse, usersResponse] = await Promise.all([
                 supabase.from('destinations').select(`*, admin_profile:admin_id(full_name)`).order('created_at', { ascending: false }),
-                supabase.from('audit_log').select(`*, profiles(full_name)`).order('created_at', { ascending: false }).limit(20)
+                supabase
+                    .from('audit_log')
+                    .select(`*, profiles(full_name)`)
+                    .eq('action', 'destination_status_changed') // THE KEY FILTER
+                    .order('created_at', { ascending: false })
+                    .limit(10) // Let's show 10 initially
             ]);
 
             if (destResponse.error) throw destResponse.error;
             setDestinations(destResponse.data as Destination[] || []);
-
-            if (logResponse.error) throw logResponse.error;
-            setActivityLog(logResponse.data || []);
+   if (logResponse.error) throw logResponse.error;
+            setStatusChangeLog(logResponse.data || []);
+            if ((logResponse.data || []).length < 10) {
+                setHasMoreLogs(false);
+            }
             
             // Fetch stats and charts
             await fetchStats();
@@ -109,24 +124,43 @@ const SuperAdminDashboard = () => {
     useEffect(() => {
         if (isSuperAdmin) fetchAllData();
     }, [isSuperAdmin]);
-     const formatLogEntry = (log: LogEntry) => {
-        let icon = <Clock className="h-4 w-4 text-muted-foreground" />;
-        let message = <span>{log.profiles?.full_name || 'A user'}</span>;
-        let actionText = '';
+      const formatLogEntry = (log: LogEntry) => {
+        let icon = <XCircle className="h-4 w-4 text-red-500" />;
+        if (log.details.status === 'approved') icon = <CheckCircle className="h-4 w-4 text-green-500" />;
+        if (log.details.status === 'archived') icon = <Archive className="h-4 w-4 text-muted-foreground" />;
 
-        switch(log.action) {
-            case 'destination_status_changed':
-                actionText = ` ${log.details.status} "${log.details.destinationName}".`;
-                if (log.details.status === 'approved') icon = <CheckCircle className="h-4 w-4 text-green-500" />;
-                else icon = <XCircle className="h-4 w-4 text-red-500" />;
-                break;
-            // ... include all your other cases for different log types
-            default:
-                break;
-        }
+        const message = <span>{log.profiles?.full_name || 'An admin'}</span>;
+        const actionText = ` ${log.details.status} "${log.details.destinationName}".`;
+
         return { icon, message: <>{message}{actionText}</> };
     };
 
+     // --- NEW ---: A specific function for loading more status logs
+    const loadMoreStatusLogs = async () => {
+        if (loadingMoreLogs || !hasMoreLogs) return;
+        setLoadingMoreLogs(true);
+        
+        const from = logPage * 10;
+        const to = from + 9;
+
+        const { data: newLogs, error } = await supabase
+            .from('audit_log')
+            .select(`*, profiles(full_name)`)
+            .eq('action', 'destination_status_changed')
+            .order('created_at', { ascending: false })
+            .range(from, to);
+            
+        if (error) {
+            toast({ title: "Error", description: "Could not load more logs.", variant: "destructive" });
+        } else if (newLogs) {
+            setStatusChangeLog(prev => [...prev, ...newLogs]);
+            setLogPage(prev => prev + 1);
+            if (newLogs.length < 10) {
+                setHasMoreLogs(false);
+            }
+        }
+        setLoadingMoreLogs(false);
+    };
 
   const fetchUsers = async () => {
     const { data: profiles, error: profilesError } = await supabase.from('profiles').select('*').order('full_name', { ascending: true });
@@ -275,31 +309,11 @@ const SuperAdminDashboard = () => {
             </Card>
           </div>
 
-                              {/* Activity Log takes up 1/3 of the width */}
-                        <div className="lg:col-span-1 space-y-8">
-                           <Card>
-                               <CardHeader><CardTitle>Recent Activity Log</CardTitle></CardHeader>
-                               <CardContent>
-                                   <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-                                       {activityLog.length > 0 ? activityLog.map(log => {
-                                           const { icon, message } = formatLogEntry(log);
-                                           return (
-                                               <div key={log.id} className="flex items-start gap-3 text-sm">
-                                                   <div className="mt-1">{icon}</div>
-                                                   <div className="flex-1">
-                                                       <p>{message}</p>
-                                                       <p className="text-xs text-muted-foreground">{new Date(log.created_at).toLocaleString()}</p>
-                                                   </div>
-                                               </div>
-                                           );
-                                       }) : (<p className="text-center text-muted-foreground py-8">No recent activity.</p>)}
-                                   </div>
-                               </CardContent>
-                            </Card>
-                        </div>
+                          
 
-
-          <Card>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div className="lg:col-span-2 space-y-8">
+                        <Card>
             <CardHeader>
               <CardTitle>User Management</CardTitle>
               <div className="flex items-center space-x-2">
@@ -362,6 +376,38 @@ const SuperAdminDashboard = () => {
             </CardContent>
           </Card>
         </div>
+                        </div>
+                        
+                        <div className="lg:col-span-1 space-y-8">
+                            <Card>
+                               <CardHeader><CardTitle>Destination Status Log</CardTitle></CardHeader>
+                               <CardContent>
+                                   <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                                       {statusChangeLog.length > 0 ? statusChangeLog.map(log => {
+                                           const { icon, message } = formatLogEntry(log);
+                                           return (
+                                               <div key={log.id} className="flex items-start gap-3 text-sm">
+                                                   <div className="mt-1">{icon}</div>
+                                                   <div className="flex-1">
+                                                       <p>{message}</p>
+                                                       <p className="text-xs text-muted-foreground">{new Date(log.created_at).toLocaleString()}</p>
+                                                   </div>
+                                               </div>
+                                           );
+                                       }) : (<p className="text-center text-muted-foreground py-8">No status changes found.</p>)}
+                                   </div>
+                                   {hasMoreLogs && (
+                                     <div className="text-center mt-4">
+                                       <Button onClick={loadMoreStatusLogs} disabled={loadingMoreLogs} variant="outline">
+                                         {loadingMoreLogs ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>) : ('View More')}
+                                       </Button>
+                                     </div>
+                                   )}
+                               </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                
       </main>
       <Footer />
     </div>
