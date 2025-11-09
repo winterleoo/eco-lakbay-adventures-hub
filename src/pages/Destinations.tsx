@@ -156,19 +156,25 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
     });
   }, [destinations, searchTerm, selectedProvince, selectedType, selectedRating]);
 
-  const fetchReviews = async (destinationId: string) => {
-    setReviewsLoading(true);
-    setReviews([]);
-    try {
-      const { data, error } = await supabase.from('destination_ratings').select(`*, profiles (full_name, avatar_url)`).eq('destination_id', destinationId).order('created_at', { ascending: false });
-      if (error) throw error;
-      setReviews(data as Review[]);
-    } catch (err) {
-      console.error("Error fetching reviews:", err);
-    } finally {
-      setReviewsLoading(false);
-    }
-  };
+ const fetchReviews = async (destinationId: string) => {
+        setReviewsLoading(true);
+        setReviews([]);
+        try {
+            const { data, error } = await supabase
+                .from('destination_ratings')
+                // The fix is here: specify the column to join on.
+                .select(`*, profiles:user_id (full_name, avatar_url)`)
+                .eq('destination_id', destinationId)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            setReviews(data as Review[]);
+        } catch (err) {
+            console.error("Error fetching reviews:", err);
+        } finally {
+            setReviewsLoading(false);
+        }
+    };
 
   const handleDestinationClick = (destination: Destination) => {
     setSelectedDestination(destination);
