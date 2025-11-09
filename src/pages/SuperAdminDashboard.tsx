@@ -122,7 +122,7 @@ const SuperAdminDashboard = () => {
                 break;
             // ... include all your other cases for different log types
             default:
-                actionText = ` performed action: ${log.action}.`;
+                break;
         }
         return { icon, message: <>{message}{actionText}</> };
     };
