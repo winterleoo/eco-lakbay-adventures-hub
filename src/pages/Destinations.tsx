@@ -280,9 +280,10 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
 <DialogHeader className="space-y-4">
                                 {/* The single, correct gallery implementation */}
                                 <div className="space-y-3">
-                                    <button 
+                                     <button 
+                                        type="button" 
                                         onClick={handleOpenLightbox} 
-                                        className="w-full h-64 md:h-80 bg-muted rounded-lg overflow-hidden relative group focus:outline-none"
+                                        className="..."
                                     >
                                         <img 
                                             src={getPublicUrlFromPath(selectedDestination.images?.[currentImageIndex])} 
@@ -299,9 +300,10 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
                                         <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2">
                                             {selectedDestination.images.map((imgPath: string, index: number) => (
                                                 <button
+                                                    type="button"
                                                     key={index}
                                                     onClick={() => setCurrentImageIndex(index)}
-                                                    className={cn("w-16 h-16 rounded-md overflow-hidden border-2 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-forest", index === currentImageIndex ? "border-forest" : "border-transparent")}
+                                                    className={cn(...)}
                                                 >
                                                     <img src={getPublicUrlFromPath(imgPath)} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
                                                 </button>
