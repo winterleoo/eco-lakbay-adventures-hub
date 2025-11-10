@@ -86,7 +86,7 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
   // State for reviews inside the modal
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
-      const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+ const [isLightboxOpen, setIsLightboxOpen] = useState(false);
     const [lightboxImageUrl, setLightboxImageUrl] = useState('');
 
   const ratingOptions = [
@@ -224,9 +224,12 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
 
-  const handleImageClick = (imageUrl: string) => {
-        setLightboxImageUrl(imageUrl);
-        setIsLightboxOpen(true);
+  const handleOpenLightbox = () => {
+        if (selectedDestination && selectedDestination.images) {
+            const fullSizeUrl = getPublicUrlFromPath(selectedDestination.images[currentImageIndex]);
+            setLightboxImageUrl(fullSizeUrl);
+            setIsLightboxOpen(true);
+        }
     };
 
   const renderContent = () => {
@@ -276,41 +279,42 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
             <>
               <DialogHeader className="space-y-4">
                       {/* --- THIS IS THE FIXED GALLERY --- */}
-          <div className="space-y-2">
-            {/* 1. The large, clickable main image */}
-            <button
-              onClick={() => handleImageClick(getPublicUrlFromPath(selectedDestination.images?.[currentImageIndex]))}
-              className="w-full h-64 md:h-80 bg-muted rounded-lg overflow-hidden relative group focus:outline-none"
-            >
-              <img
-                src={getPublicUrlFromPath(selectedDestination.images?.[currentImageIndex])}
-                alt={`${selectedDestination.business_name} photo ${currentImageIndex + 1}`}
-                className="w-full h-full object-cover"
-                onError={e => { (e.currentTarget as HTMLImageElement).src = fallbackImage; }}
-              />
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                <span className="text-white font-semibold">View Full Size</span>
-              </div>
-            </button>
-            
-            {/* 2. The row of clickable thumbnails */}
-            {(selectedDestination.images?.length ?? 0) > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-2">
-                {selectedDestination.images?.map((imgPath: string, index: number) => (
-                  <button
-                    key={index}
-                    onClick={() => setCurrentImageIndex(index)}
-                    className={cn(
-                      "w-16 h-16 rounded-md overflow-hidden border-2 flex-shrink-0 focus:outline-none",
-                      index === currentImageIndex ? "border-forest ring-2 ring-offset-2 ring-forest" : "border-transparent"
-                    )}
-                  >
-                    <img src={getPublicUrlFromPath(imgPath)} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+               {/* --- THIS IS THE DEFINITIVE FIX FOR THE GALLERY --- */}
+                                <div className="space-y-3">
+                                    {/* 1. Main image display, now a clickable button */}
+                                    <button 
+                                        onClick={handleOpenLightbox} 
+                                        className="w-full h-64 md:h-80 bg-muted rounded-lg overflow-hidden relative group focus:outline-none"
+                                    >
+                                        <img 
+                                            src={getPublicUrlFromPath(selectedDestination.images?.[currentImageIndex])} 
+                                            alt={`${selectedDestination.business_name} photo ${currentImageIndex + 1}`}
+                                            className="w-full h-full object-cover"
+                                            onError={e => { (e.currentTarget as HTMLImageElement).src = fallbackImage; }}
+                                        />
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity pointer-events-none">
+                                            <span className="text-white font-semibold text-lg">View Full Size</span>
+                                        </div>
+                                    </button>
+                                    
+                                    {/* 2. Thumbnail gallery */}
+                                    {(selectedDestination.images?.length ?? 0) > 1 && (
+                                        <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2">
+                                            {selectedDestination.images.map((imgPath: string, index: number) => (
+                                                <button
+                                                    key={index}
+                                                    onClick={() => setCurrentImageIndex(index)}
+                                                    className={cn(
+                                                        "w-16 h-16 rounded-md overflow-hidden border-2 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-forest",
+                                                        index === currentImageIndex ? "border-forest" : "border-transparent"
+                                                    )}
+                                                >
+                                                    <img src={getPublicUrlFromPath(imgPath)} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                 <div className="w-full h-64 md:h-80 bg-muted rounded-lg overflow-hidden relative"><img src={getPublicUrlFromPath(selectedDestination.images?.[currentImageIndex])} alt={`${selectedDestination.business_name} photo ${currentImageIndex + 1}`} className="w-full h-full object-cover" onError={e => { (e.currentTarget as HTMLImageElement).src = fallbackImage; }} /></div>
                 {(selectedDestination.images?.length ?? 0) > 1 && (<div className="flex gap-2 overflow-x-auto pb-2">{selectedDestination.images?.map((imgPath: string, index: number) => (<button key={index} onClick={() => setCurrentImageIndex(index)} className={cn("w-16 h-16 rounded-md overflow-hidden border-2 flex-shrink-0", index === currentImageIndex ? "border-forest" : "border-transparent")}><img src={getPublicUrlFromPath(imgPath)} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" /></button>))}</div>)}
                 <DialogTitle className="text-3xl text-forest !mt-2">{selectedDestination.business_name}</DialogTitle>
@@ -348,6 +352,24 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
           )}
         </DialogContent>
       </Dialog>
+       <Dialog open={isLightboxOpen} onOpenChange={setIsLightboxOpen}>
+                <DialogContent className="max-w-6xl w-auto h-auto bg-transparent border-none shadow-none p-0">
+                    <img
+                        src={lightboxImageUrl}
+                        alt="Full size destination view"
+                        className="w-auto h-auto max-h-[95vh] max-w-[95vw] object-contain rounded-lg"
+                    />
+                    <Dialog.Close asChild>
+                         <Button 
+                            variant="ghost" 
+                            size="icon"
+                            className="absolute -top-2 -right-2 bg-black/50 text-white hover:bg-black/75 hover:text-white rounded-full h-8 w-8"
+                        >
+                            <CloseIcon className="w-5 h-5" />
+                        </Button>
+                    </Dialog.Close>
+                </DialogContent>
+            </Dialog>
       <DestinationRatingModal isOpen={isRatingModalOpen} onClose={() => setIsRatingModalOpen(false)} destination={selectedDestination} />
 
       {isPreview ? (
