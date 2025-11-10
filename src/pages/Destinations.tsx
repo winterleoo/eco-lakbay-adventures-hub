@@ -5,7 +5,7 @@ import Footer from "@/components/Footer";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle,  DialogClose } from "@/components/ui/dialog";
 import { Star, MapPin, Loader2, Search, X, Clock, Lock, Unlock } from "lucide-react";
 import { DestinationRatingModal } from "@/components/DestinationRatingModal";
 import { supabase } from "@/integrations/supabase/client";
@@ -223,9 +223,8 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
     if (!name) return "U";
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
-
-  const handleOpenLightbox = () => {
-        if (selectedDestination && selectedDestination.images) {
+ const handleOpenLightbox = () => {
+        if (selectedDestination && selectedDestination.images && selectedDestination.images[currentImageIndex]) {
             const fullSizeUrl = getPublicUrlFromPath(selectedDestination.images[currentImageIndex]);
             setLightboxImageUrl(fullSizeUrl);
             setIsLightboxOpen(true);
@@ -352,11 +351,15 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
         <Dialog open={isLightboxOpen} onOpenChange={setIsLightboxOpen}>
                 <DialogContent className="max-w-6xl w-auto h-auto bg-transparent border-none shadow-none p-0">
                     <img src={lightboxImageUrl} alt="Full size destination view" className="w-auto h-auto max-h-[95vh] max-w-[95vw] object-contain rounded-lg" />
-                    <Dialog.Close asChild>
-                         <Button variant="ghost" size="icon" className="absolute -top-2 -right-2 bg-black/50 text-white hover:bg-black/75 hover:text-white rounded-full h-8 w-8">
+                    <DialogClose asChild>
+                         <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute -top-2 -right-2 bg-black/50 text-white hover:bg-black/75 hover:text-white rounded-full h-8 w-8"
+                        >
                             <CloseIcon className="w-5 h-5" />
                         </Button>
-                    </Dialog.Close>
+                    </DialogClose>
                 </DialogContent>
             </Dialog>
       <DestinationRatingModal isOpen={isRatingModalOpen} onClose={() => setIsRatingModalOpen(false)} destination={selectedDestination} />
