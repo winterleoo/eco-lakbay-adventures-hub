@@ -277,11 +277,9 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           {selectedDestination && (
             <>
-              <DialogHeader className="space-y-4">
-                      {/* --- THIS IS THE FIXED GALLERY --- */}
-               {/* --- THIS IS THE DEFINITIVE FIX FOR THE GALLERY --- */}
+<DialogHeader className="space-y-4">
+                                {/* The single, correct gallery implementation */}
                                 <div className="space-y-3">
-                                    {/* 1. Main image display, now a clickable button */}
                                     <button 
                                         onClick={handleOpenLightbox} 
                                         className="w-full h-64 md:h-80 bg-muted rounded-lg overflow-hidden relative group focus:outline-none"
@@ -297,17 +295,13 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
                                         </div>
                                     </button>
                                     
-                                    {/* 2. Thumbnail gallery */}
                                     {(selectedDestination.images?.length ?? 0) > 1 && (
                                         <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2">
                                             {selectedDestination.images.map((imgPath: string, index: number) => (
                                                 <button
                                                     key={index}
                                                     onClick={() => setCurrentImageIndex(index)}
-                                                    className={cn(
-                                                        "w-16 h-16 rounded-md overflow-hidden border-2 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-forest",
-                                                        index === currentImageIndex ? "border-forest" : "border-transparent"
-                                                    )}
+                                                    className={cn("w-16 h-16 rounded-md overflow-hidden border-2 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-forest", index === currentImageIndex ? "border-forest" : "border-transparent")}
                                                 >
                                                     <img src={getPublicUrlFromPath(imgPath)} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
                                                 </button>
@@ -315,9 +309,7 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
                                         </div>
                                     )}
                                 </div>
-                <div className="w-full h-64 md:h-80 bg-muted rounded-lg overflow-hidden relative"><img src={getPublicUrlFromPath(selectedDestination.images?.[currentImageIndex])} alt={`${selectedDestination.business_name} photo ${currentImageIndex + 1}`} className="w-full h-full object-cover" onError={e => { (e.currentTarget as HTMLImageElement).src = fallbackImage; }} /></div>
-                {(selectedDestination.images?.length ?? 0) > 1 && (<div className="flex gap-2 overflow-x-auto pb-2">{selectedDestination.images?.map((imgPath: string, index: number) => (<button key={index} onClick={() => setCurrentImageIndex(index)} className={cn("w-16 h-16 rounded-md overflow-hidden border-2 flex-shrink-0", index === currentImageIndex ? "border-forest" : "border-transparent")}><img src={getPublicUrlFromPath(imgPath)} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" /></button>))}</div>)}
-                <DialogTitle className="text-3xl text-forest !mt-2">{selectedDestination.business_name}</DialogTitle>
+                                 <DialogTitle className="text-3xl text-forest !mt-2">{selectedDestination.business_name}</DialogTitle>
                 <div className="flex flex-wrap items-center gap-2 pt-1 !-mt-2">
                   {selectedDestination.listing_type && (<Badge variant={selectedDestination.listing_type === 'private' ? "secondary" : "outline"}><div className="flex items-center gap-1.5">{selectedDestination.listing_type === 'private' ? <Lock className="w-3 h-3"/> : <Unlock className="w-3 h-3"/>}{selectedDestination.listing_type}</div></Badge>)}
                   {selectedDestination.business_type && (<Badge variant="outline" className="capitalize">{selectedDestination.business_type}</Badge>)}
@@ -352,19 +344,11 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
           )}
         </DialogContent>
       </Dialog>
-       <Dialog open={isLightboxOpen} onOpenChange={setIsLightboxOpen}>
+        <Dialog open={isLightboxOpen} onOpenChange={setIsLightboxOpen}>
                 <DialogContent className="max-w-6xl w-auto h-auto bg-transparent border-none shadow-none p-0">
-                    <img
-                        src={lightboxImageUrl}
-                        alt="Full size destination view"
-                        className="w-auto h-auto max-h-[95vh] max-w-[95vw] object-contain rounded-lg"
-                    />
+                    <img src={lightboxImageUrl} alt="Full size destination view" className="w-auto h-auto max-h-[95vh] max-w-[95vw] object-contain rounded-lg" />
                     <Dialog.Close asChild>
-                         <Button 
-                            variant="ghost" 
-                            size="icon"
-                            className="absolute -top-2 -right-2 bg-black/50 text-white hover:bg-black/75 hover:text-white rounded-full h-8 w-8"
-                        >
+                         <Button variant="ghost" size="icon" className="absolute -top-2 -right-2 bg-black/50 text-white hover:bg-black/75 hover:text-white rounded-full h-8 w-8">
                             <CloseIcon className="w-5 h-5" />
                         </Button>
                     </Dialog.Close>
