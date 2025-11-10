@@ -54,6 +54,7 @@ interface Destination {
   owner_profile: {
       full_name: string;
   } | null;
+   admin_profile: { full_name: string; } | null;
 }
 
 const statusColors: { [key: string]: 'default' | 'secondary' | 'destructive' | 'outline' } = {
@@ -124,8 +125,8 @@ const AdminDashboard = () => {
                 .from('destinations')
                 .select(`
                     *,
-                    destination_permits(*),
-                    owner_profile:owner_id ( full_name )
+                    admin_profile:admin_id (full_name),
+                    owner_profile:owner_id (full_name)
                 `)
                 .order('created_at', { ascending: false })
                 .range(0, PAGE_SIZE - 1);
@@ -186,31 +187,27 @@ const AdminDashboard = () => {
     setLoadingMoreLogs(false);
   };
 
-  const loadMoreDestinations = async () => {
-    if (loadingMoreDestinations || !hasMoreDestinations) return;
-    setLoadingMoreDestinations(true);
-    const from = destinationsPage * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-    
-const { data: newDests, error } = await supabase
+   const loadMoreDestinations = async () => {
+        if (loadingMoreDestinations || !hasMoreDestinations) return;
+        setLoadingMoreDestinations(true);
+        const from = destinationsPage * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
+
+        const { data: newDests, error } = await supabase
             .from('destinations')
-            .select(`
-                *,
-                destination_permits(*),
-                owner_profile:owner_id ( full_name )
-            `)
+            .select(`*, admin_profile:admin_id (full_name), owner_profile:owner_id (full_name)`)
             .order('created_at', { ascending: false })
             .range(from, to);
 
-    if (error) {
-      toast({ title: "Error", description: "Could not load more destinations.", variant: "destructive" });
-    } else if (newDests) {
-      setAllDestinations(prev => [...prev, ...newDests]);
-      setDestinationsPage(prev => prev + 1);
-      if (newDests.length < PAGE_SIZE) setHasMoreDestinations(false);
-    }
-    setLoadingMoreDestinations(false);
-  };
+        if (error) {
+            toast({ title: "Error", description: "Could not load more destinations.", variant: "destructive" });
+        } else if (newDests) {
+            setDestinations(prev => [...prev, ...newDests]);
+            setDestinationsPage(prev => prev + 1);
+            if (newDests.length < PAGE_SIZE) setHasMoreDestinations(false);
+        }
+        setLoadingMoreDestinations(false);
+    };
   
   useEffect(() => {
     if (user) loadAdminData();
