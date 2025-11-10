@@ -54,6 +54,7 @@ interface Destination {
   owner_profile: {
       full_name: string;
   } | null;
+  
    admin_profile: { full_name: string; } | null;
 }
 
@@ -121,18 +122,32 @@ const AdminDashboard = () => {
       const { data: profileData } = await supabase.from('profiles').select('*').eq('user_id', user!.id).single();
       setProfile(profileData);
 
-      const { data: destData, error: destError } = await supabase
+         // 1. Fetch destinations WITHOUT any joins
+            const { data: destData, error: destError } = await supabase
                 .from('destinations')
-                .select(`
-                    *,
-                    admin_profile:admin_id (full_name),
-                    owner_profile:owner_id (full_name)
-                `)
+                .select('*, destination_permits(*)')
                 .order('created_at', { ascending: false })
                 .range(0, PAGE_SIZE - 1);
             
             if (destError) throw destError;
-            setAllDestinations(destData || []);
+            if (!destData) { setAllDestinations([]); return; }
+
+            // 2. Fetch all user profiles separately
+            const { data: profiles, error: profilesError } = await supabase
+                .from('profiles')
+                .select('user_id, full_name');
+            if (profilesError) throw profilesError;
+
+            // 3. Manually "join" them in JavaScript
+            const destinationsWithOwners = destData.map(dest => {
+                const ownerProfile = profiles.find(p => p.user_id === dest.owner_id);
+                return {
+                    ...dest,
+                    owner_profile: ownerProfile ? { full_name: ownerProfile.full_name } : null,
+                };
+            });
+            
+            setAllDestinations(destinationsWithOwners);
       if ((destData || []).length < PAGE_SIZE) setHasMoreDestinations(false);
       
       const { data: usersData, error: usersError } = await supabase.from('profiles').select('*').order('full_name', { ascending: true });
@@ -188,21 +203,25 @@ const AdminDashboard = () => {
   };
 
    const loadMoreDestinations = async () => {
+        // This function also needs the same "brute force" logic
         if (loadingMoreDestinations || !hasMoreDestinations) return;
         setLoadingMoreDestinations(true);
         const from = destinationsPage * PAGE_SIZE;
         const to = from + PAGE_SIZE - 1;
 
-        const { data: newDests, error } = await supabase
-            .from('destinations')
-            .select(`*, admin_profile:admin_id (full_name), owner_profile:owner_id (full_name)`)
-            .order('created_at', { ascending: false })
-            .range(from, to);
+        // Fetch destinations and profiles separately
+        const { data: newDests, error: destError } = await supabase.from('destinations').select('*, destination_permits(*)').order('created_at', { ascending: false }).range(from, to);
+        const { data: profiles, error: profilesError } = await supabase.from('profiles').select('user_id, full_name');
 
-        if (error) {
+        if (destError || profilesError) {
             toast({ title: "Error", description: "Could not load more destinations.", variant: "destructive" });
-        } else if (newDests) {
-            setDestinations(prev => [...prev, ...newDests]);
+        } else if (newDests && profiles) {
+            // Manually join the new data
+            const newDestinationsWithOwners = newDests.map(dest => {
+                const ownerProfile = profiles.find(p => p.user_id === dest.owner_id);
+                return { ...dest, owner_profile: ownerProfile ? { full_name: ownerProfile.full_name } : null };
+            });
+            setAllDestinations(prev => [...prev, ...newDestinationsWithOwners]);
             setDestinationsPage(prev => prev + 1);
             if (newDests.length < PAGE_SIZE) setHasMoreDestinations(false);
         }
