@@ -51,6 +51,7 @@ interface Destination {
   province: string;
   status: string;
   destination_permits: any[];
+   owner_id: string; // Ensure this is part of the type
   owner_profile: {
       full_name: string;
   } | null;
@@ -118,23 +119,38 @@ const AdminDashboard = () => {
       setDestinationsPage(1);
       setHasMoreLogs(true);
       setHasMoreDestinations(true);
+ const { data: profileData } = await supabase.from('profiles').select('*').eq('user_id', user!.id).single();
+            setProfile(profileData);
 
-      const { data: profileData } = await supabase.from('profiles').select('*').eq('user_id', user!.id).single();
-      setProfile(profileData);
-
-         // 1. Fetch destinations WITHOUT any joins
+            // 1. Fetch destinations WITHOUT joins
             const { data: destData, error: destError } = await supabase
                 .from('destinations')
-                .select(`
-                    *,
-                    destination_permits(*),
-                    owner_profile:owner_id ( full_name )
-                `)
+                .select('*, destination_permits(*)')
                 .order('created_at', { ascending: false })
                 .range(0, PAGE_SIZE - 1);
-            
+
             if (destError) throw destError;
-            setAllDestinations(destData || []);
+            if (!destData) {
+                setAllDestinations([]);
+                // Still need to fetch other data even if destinations are empty
+            } else {
+                // 2. Fetch all user profiles separately
+                const { data: profiles, error: profilesError } = await supabase
+                    .from('profiles')
+                    .select('user_id, full_name');
+                if (profilesError) throw profilesError;
+
+                // 3. Manually "join" them in JavaScript
+                const destinationsWithOwners = (destData || []).map(dest => {
+                    const ownerProfile = profiles.find(p => p.user_id === dest.owner_id);
+                    return {
+                        ...dest,
+                        owner_profile: ownerProfile ? { full_name: ownerProfile.full_name } : null,
+                    };
+                });
+
+                setAllDestinations(destinationsWithOwners as Destination[]);
+            }
       if ((destData || []).length < PAGE_SIZE) setHasMoreDestinations(false);
       
       const { data: usersData, error: usersError } = await supabase.from('profiles').select('*').order('full_name', { ascending: true });
@@ -189,34 +205,35 @@ const AdminDashboard = () => {
     setLoadingMoreLogs(false);
   };
 
-   const loadMoreDestinations = async () => {
+     const loadMoreDestinations = async () => {
         if (loadingMoreDestinations || !hasMoreDestinations) return;
         setLoadingMoreDestinations(true);
         const from = destinationsPage * PAGE_SIZE;
         const to = from + PAGE_SIZE - 1;
 
-        const { data: newDests, error } = await supabase
-            .from('destinations')
-            .select(`
-                *,
-                destination_permits(*),
-                owner_profile:owner_id ( full_name )
-            `)
-            .order('created_at', { ascending: false })
-            .range(from, to);
-        if (destError || profilesError) {
-            toast({ title: "Error", description: "Could not load more destinations.", variant: "destructive" });
-        } else if (newDests && profiles) {
+        try {
+            // Fetch destinations and profiles separately
+            const { data: newDests, error: destError } = await supabase.from('destinations').select('*, destination_permits(*)').order('created_at', { ascending: false }).range(from, to);
+            if (destError) throw destError;
+            
+            const { data: profiles, error: profilesError } = await supabase.from('profiles').select('user_id, full_name');
+            if (profilesError) throw profilesError;
+
             // Manually join the new data
-            const newDestinationsWithOwners = newDests.map(dest => {
-                const ownerProfile = profiles.find(p => p.user_id === dest.owner_id);
-                return { ...dest, owner_profile: ownerProfile ? { full_name: ownerProfile.full_name } : null };
-            });
-            setAllDestinations(prev => [...prev, ...newDestinationsWithOwners]);
-            setDestinationsPage(prev => prev + 1);
-            if (newDests.length < PAGE_SIZE) setHasMoreDestinations(false);
+            if (newDests && profiles) {
+                const newDestinationsWithOwners = newDests.map(dest => {
+                    const ownerProfile = profiles.find(p => p.user_id === dest.owner_id);
+                    return { ...dest, owner_profile: ownerProfile ? { full_name: ownerProfile.full_name } : null };
+                });
+                setAllDestinations(prev => [...prev, ...newDestinationsWithOwners]);
+                setDestinationsPage(prev => prev + 1);
+                if (newDests.length < PAGE_SIZE) setHasMoreDestinations(false);
+            }
+        } catch (error: any) {
+             toast({ title: "Error", description: "Could not load more destinations.", variant: "destructive" });
+        } finally {
+            setLoadingMoreDestinations(false);
         }
-        setLoadingMoreDestinations(false);
     };
   
   useEffect(() => {
