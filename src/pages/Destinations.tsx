@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import fallbackImage from "@/assets/zambales-real-village.jpg";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { useAuth } from "@/hooks/useAuth"; // --- NEW ---
+import { useAuth } from "@/hooks/useAuth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
@@ -33,8 +33,8 @@ interface Destination {
   website?: string;
   email?: string;
   sustainability_practices?: string;
-    listing_type?: 'private' | 'public'; // New
-  operating_hours?: string;             // New
+  listing_type?: 'private' | 'public';
+  operating_hours?: string;
   peak_days?: string;     
 }
 
@@ -59,7 +59,7 @@ interface DestinationsProps {
 
 const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, ownerMode = false }) => {
   const navigate = useNavigate();
-   const { user } = useAuth(); // --- NEW --- Get the current user
+  const { user } = useAuth();
 
   // State for data and loading
   const [destinations, setDestinations] = useState<Destination[]>([]);
@@ -72,14 +72,14 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
   const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-  // State for filters
+  // --- MODIFIED ---: State for filters (changed province to city)
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedProvince, setSelectedProvince] = useState('');
+  const [selectedCity, setSelectedCity] = useState('');
   const [selectedType, setSelectedType] = useState('');
   const [selectedRating, setSelectedRating] = useState('');
 
-  // State for filter dropdown options
-  const [provinces, setProvinces] = useState<string[]>([]);
+  // --- MODIFIED ---: State for filter dropdown options (changed province to city)
+  const [cities, setCities] = useState<string[]>([]);
   const [businessTypes, setBusinessTypes] = useState<string[]>([]);
   
   // State for reviews inside the modal
@@ -98,20 +98,18 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
       setIsLoading(true);
       setError(null);
       try {
-        let query = supabase.from('destinations').select('*').eq('status', 'approved');
+        let query = supabase.from('destinations').select('*');
 
         if (ownerMode) {
-            // If in owner mode, only fetch destinations for the current user
             if (!user) {
-                setDestinations([]); // Don't fetch if no user is logged in
+                setDestinations([]);
                 return;
             }
             query = query.eq('owner_id', user.id);
         } else {
-            // Otherwise, fetch all approved destinations (the default behavior)
             query = query.eq('status', 'approved');
         }
-        // If a limit is provided (for preview mode), apply ordering and limit
+
         if (limit) {
           query = query.order('rating', { ascending: false, nullsFirst: false }).limit(limit);
         }
@@ -121,11 +119,11 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
 
         if (data) {
           setDestinations(data);
-          // Only populate filter options if we're on the full page (not a preview)
+          // --- MODIFIED ---: Populate city filter options instead of province
           if (!isPreview) {
-            const uniqueProvinces = [...new Set(data.map(d => d.province).filter(Boolean))].sort();
+            const uniqueCities = [...new Set(data.map(d => d.city).filter(Boolean))].sort();
             const uniqueTypes = [...new Set(data.map(d => d.business_type).filter(Boolean))].sort();
-            setProvinces(['All Provinces', ...uniqueProvinces]);
+            setCities(['All Cities', ...uniqueCities]);
             setBusinessTypes(['All Types', ...uniqueTypes]);
           }
         }
@@ -139,6 +137,7 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
     fetchDestinations();
   }, [isPreview, limit, ownerMode, user]);
 
+  // --- MODIFIED ---: Updated filtering logic to use city
   const filteredDestinations = useMemo(() => {
     const minRating = selectedRating && selectedRating !== 'all' ? parseFloat(selectedRating) : 0;
     return destinations.filter(destination => {
@@ -149,12 +148,12 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
         destination.province.toLowerCase().includes(searchTermLower) ||
         destination.description.toLowerCase().includes(searchTermLower)
       ) : true;
-      const matchesProvince = selectedProvince && selectedProvince !== 'All Provinces' ? destination.province === selectedProvince : true;
+      const matchesCity = selectedCity && selectedCity !== 'All Cities' ? destination.city === selectedCity : true;
       const matchesType = selectedType && selectedType !== 'All Types' ? destination.business_type === selectedType : true;
       const matchesRating = minRating > 0 ? (destination.rating || 0) >= minRating : true;
-      return matchesSearch && matchesProvince && matchesType && matchesRating;
+      return matchesSearch && matchesCity && matchesType && matchesRating;
     });
-  }, [destinations, searchTerm, selectedProvince, selectedType, selectedRating]);
+  }, [destinations, searchTerm, selectedCity, selectedType, selectedRating]);
 
  const fetchReviews = async (destinationId: string) => {
         setReviewsLoading(true);
@@ -162,7 +161,6 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
         try {
             const { data, error } = await supabase
                 .from('destination_ratings')
-                // The fix is here: specify the column to join on.
                 .select(`*, profiles:user_id (full_name, avatar_url)`)
                 .eq('destination_id', destinationId)
                 .order('created_at', { ascending: false });
@@ -183,14 +181,15 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
     fetchReviews(destination.id);
   };
 
+  // --- MODIFIED ---: Updated to reset city filter
   const handleResetFilters = () => {
     setSearchTerm('');
-    setSelectedProvince('');
+    setSelectedCity('');
     setSelectedType('');
     setSelectedRating('');
   };
 
-  const isFiltered = searchTerm || selectedProvince || selectedType || selectedRating;
+  const isFiltered = searchTerm || selectedCity || selectedType || selectedRating;
 
   const getPublicUrlFromPath = (path: string | null | undefined): string => {
     if (!path) return fallbackImage;
@@ -261,7 +260,6 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
     );
   };
   
-  // Render a simplified layout for the homepage preview
    return (
     <>
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
@@ -333,7 +331,19 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
                 <CardContent>
                   <div className="flex flex-col md:flex-row flex-wrap gap-4 items-center">
                     <div className="relative flex-grow w-full md:w-auto"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input type="text" placeholder="Search destinations, city..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" /></div>
-                    <Select value={selectedProvince} onValueChange={setSelectedProvince}><SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="All Provinces" /></SelectTrigger><SelectContent>{provinces.map(province => (<SelectItem key={province} value={province}>{province}</SelectItem>))}</SelectContent></Select>
+                    
+                    {/* --- MODIFIED ---: This entire Select component is now for cities */}
+                    <Select value={selectedCity} onValueChange={setSelectedCity}>
+                      <SelectTrigger className="w-full md:w-[180px]">
+                        <SelectValue placeholder="All Cities" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cities.map(city => (
+                          <SelectItem key={city} value={city}>{city}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
                     <Select value={selectedType} onValueChange={setSelectedType}><SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="All Types" /></SelectTrigger><SelectContent>{businessTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent></Select>
                     <Select value={selectedRating} onValueChange={setSelectedRating}>
                       <SelectTrigger className="w-full md:w-[180px]"><div className="flex items-center gap-2"><Star className="h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Any Rating" /></div></SelectTrigger>
