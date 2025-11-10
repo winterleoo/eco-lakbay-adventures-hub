@@ -216,11 +216,11 @@ const { data: newDests, error } = await supabase
     if (user) loadAdminData();
   }, [user]);
 
- const handleStatusUpdate = async (destinationId: string, status: 'approved' | 'rejected' | 'archived', destinationName: string) => {
-    // We keep your logging at the top. This is correct.
+const handleStatusUpdate = async (destinationId: string, status: 'approved' | 'rejected' | 'archived', destinationName: string) => {
+    // Logging the action at the start is perfect.
     await logAction('destination_status_changed', { destinationId, destinationName, status });
 
-    // Step 1: Update the database
+    // Step 1: Update the database. This is correct.
     const { error } = await supabase
         .from('destinations')
         .update({ status, updated_at: new Date().toISOString() })
@@ -228,29 +228,29 @@ const { data: newDests, error } = await supabase
 
     if (error) {
         toast({ title: "Update Failed", description: error.message, variant: "destructive" });
-        return; // Stop the function if the database update fails
+        return;
     }
     
     // If the database update is successful:
     toast({ title: "Success", description: `Destination has been ${status}.` });
 
-    // Step 2: Optimistically update the UI state. Your existing code for this is correct.
+    // Step 2: Optimistically update the UI state. This is correct.
     setAllDestinations(prevDests => 
         prevDests.map(dest => 
             dest.id === destinationId ? { ...dest, status } : dest
         )
     );
 
-    // Step 3: Refresh the stats. Your existing code for this is correct.
+    // Step 3: Refresh the stats. This is correct.
     const { count } = await supabase
         .from('destinations')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'approved');
     setStats(prevStats => ({ ...prevStats, totalActiveDestinations: count || 0 }));
     
-    // --- THIS IS THE NEW PART ---
-    // Step 4: After all client-side updates are done, send the email notification.
-    if (status === 'approved' || status === 'rejected') {
+    // --- THIS IS THE FIX ---
+    // The if condition now includes 'archived', so the email function will be called.
+    if (status === 'approved' || status === 'rejected' || status === 'archived') {
         // Show a temporary "sending email" toast
         const sendingToast = toast({ title: "Sending Notification...", description: "Notifying the destination owner by email." });
         
@@ -271,7 +271,7 @@ const { data: newDests, error } = await supabase
             toast({ title: "Notification Sent!", description: "The destination owner has been notified." });
         }
     }
-  };
+};
 
   const handleUpdateUser = async (userId: string, updates: any) => {
     const { id, user_id, joined_at, email, ...updateData } = updates;
