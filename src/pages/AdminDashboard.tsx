@@ -306,7 +306,9 @@ const handleStatusUpdate = async (destinationId: string, status: 'approved' | 'r
     switch(log.action) {
       case 'destination_status_changed':
         actionText = ` ${log.details.status} the destination "${log.details.destinationName}".`;
-        if (log.details.status === 'approved') icon = <CheckCircle className="h-4 w-4 text-green-500" />; else icon = <XCircle className="h-4 w-4 text-red-500" />;
+        if (log.details.status === 'approved') icon = <CheckCircle className="h-4 w-4 text-green-500" />; 
+         if (log.details.status === 'archived') icon = <Archive className="h-4 w-4 text-muted-foreground" />;
+        else icon = <XCircle className="h-4 w-4 text-red-500" />;
         break;
       case 'user_profile_updated':
         actionText = ` updated the profile for "${log.details.userName}".`; icon = <Edit2 className="h-4 w-4 text-blue-500" />;
