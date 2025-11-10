@@ -126,7 +126,7 @@ const Destinations: React.FC<DestinationsProps> = ({ isPreview = false, limit, o
           if (!isPreview) {
             const uniqueCities = [...new Set(data.map(d => d.city).filter(Boolean))].sort();
             const uniqueTypes = [...new Set(data.map(d => d.business_type).filter(Boolean))].sort();
-            setCities(['All Municipalities', ...uniqueCities]);
+            setCities(['All Cities', ...uniqueCities]);
             setBusinessTypes(['All Types', ...uniqueTypes]);
           }
         }
