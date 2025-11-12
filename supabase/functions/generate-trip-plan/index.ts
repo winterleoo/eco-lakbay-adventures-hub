@@ -46,7 +46,7 @@ serve(async (req)=>{
       - **My Interests:** ${interests.join(', ')}
 
       Please structure the response as a clear, day-by-day itinerary that is easy to follow.`;
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-latest:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -70,8 +70,8 @@ serve(async (req)=>{
           ]
         },
         generationConfig: {
-          temperature: 2.0,
-          maxOutputTokens: 65536
+          temperature: 1.0,
+          maxOutputTokens: 8192
         },
         safetySettings: [
           {
