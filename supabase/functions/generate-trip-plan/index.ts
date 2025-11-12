@@ -47,10 +47,14 @@ serve(async (req)=>{
 
       Please structure the response as a clear, day-by-day itinerary that is easy to follow.`;
 <<<<<<< HEAD
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${geminiApiKey}`, {
+=======
+<<<<<<< HEAD
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${geminiApiKey}`, {
 =======
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-latest:generateContent?key=${geminiApiKey}`, {
 >>>>>>> 5a85bc286849020af9fc8e47191c1e9eade8ff0a
+>>>>>>> f2599fe073699cb4a06c73f9018b6951a0a9643a
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
