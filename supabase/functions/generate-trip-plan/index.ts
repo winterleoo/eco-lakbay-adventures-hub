@@ -1,13 +1,24 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
-};
+// A secure, specific list of allowed origins
+const allowedOrigins = [
+  'https://www.eco-lakbay.com',
+  'https://eco-lakbay.com',
+  'https://eco-lakbay-adventures-hub.vercel.app/',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
 serve(async (req)=>{
+  // Dynamic CORS header generation
+  const origin = req.headers.get('Origin') || '';
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  };
+  // Handle preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
+    return new Response("ok", {
       headers: corsHeaders
     });
   }
@@ -15,7 +26,6 @@ serve(async (req)=>{
     if (!geminiApiKey) {
       throw new Error("GEMINI_API_KEY is not set in the function's environment variables.");
     }
-    // Deconstruct the new `startingPoint` field from the request body
     const { startingPoint, duration, interests, travelStyle, groupSize } = await req.json();
     const systemPrompt = `You are an expert travel planner for EcoLakbay, a platform focused on sustainable tourism in Pampanga, Philippines. Your goal is to generate a personalized, day-by-day travel itinerary based on the user's preferences.
 
@@ -25,18 +35,18 @@ serve(async (req)=>{
     3.  **Promote Sustainability:** Weave in eco-friendly tips.
     4.  **Format with Markdown:** Use headings (e.g., "# Day 1: ..."), bold text, and bullet points.
     5.  **Be Friendly and Engaging:** Write in a welcoming and inspiring tone.`;
-    // --- FIX #2: Add the `startingPoint` to the prompt sent to the AI ---
     const userPrompt = `
       Please create a sustainable travel plan for me in Pampanga, Philippines with the following preferences:
       
       - **My Starting Point/Accommodation:** ${startingPoint}
       - **Trip Duration:** ${duration}
+
       - **Group Size:** ${groupSize} person(s)
       - **My Travel Style:** ${travelStyle}
       - **My Interests:** ${interests.join(', ')}
 
       Please structure the response as a clear, day-by-day itinerary that is easy to follow.`;
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -60,8 +70,8 @@ serve(async (req)=>{
           ]
         },
         generationConfig: {
-          temperature: 0.8,
-          maxOutputTokens: 2048
+          temperature: 2.0,
+          maxOutputTokens: 65536
         },
         safetySettings: [
           {
@@ -88,10 +98,24 @@ serve(async (req)=>{
       throw new Error(`Gemini API error: ${response.status} - ${errorBody}`);
     }
     const data = await response.json();
-    if (!data.candidates || data.candidates.length === 0 || !data.candidates[0].content) {
-      throw new Error("Gemini returned an empty or blocked response. This might be due to safety settings.");
+    // --- THIS IS THE FIX ---
+    // Safely access the first candidate using optional chaining.
+    const candidate = data?.candidates?.[0];
+    // Check if the candidate exists. If not, it was likely blocked by safety settings.
+    if (!candidate) {
+      // Log the full response for debugging purposes in your Supabase logs.
+      console.error("Gemini response was blocked or empty. Full response:", JSON.stringify(data, null, 2));
+      throw new Error("The request was blocked by the AI's safety filters. Please try rephrasing your interests.");
     }
-    const tripPlan = data.candidates[0].content.parts[0].text;
+    // Safely access the text content.
+    const tripPlanPart = candidate?.content?.parts?.[0];
+    const tripPlan = tripPlanPart?.text;
+    // Check if the text content exists.
+    if (!tripPlan) {
+      console.error("Gemini response was valid but contained no text. Full candidate:", JSON.stringify(candidate, null, 2));
+      throw new Error("The AI returned an empty plan. Please try again.");
+    }
+    // --- END OF FIX ---
     return new Response(JSON.stringify({
       tripPlan
     }), {
