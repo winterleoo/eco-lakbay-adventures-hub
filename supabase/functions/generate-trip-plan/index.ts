@@ -46,33 +46,41 @@ serve(async (req)=>{
       - **My Interests:** ${interests.join(', ')}
 
       Please structure the response as a clear, day-by-day itinerary that is easy to follow.`;
-
+    const contents = [
+      {
+        role: 'user',
+        parts: [
+          {
+            text: systemPrompt
+          }
+        ]
+      },
+      {
+        role: 'model',
+        parts: [
+          {
+            text: "Understood. I am ready to create a sustainable travel itinerary for Pampanga."
+          }
+        ] // A simple priming response.
+      },
+      {
+        role: 'user',
+        parts: [
+          {
+            text: userPrompt
+          }
+        ]
+      }
+    ];
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${geminiApiKey}`, {
-
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: userPrompt
-              }
-            ]
-          }
-        ],
-        systemInstruction: {
-          parts: [
-            {
-              text: systemPrompt
-            }
-          ]
-        },
+        contents,
         generationConfig: {
-          temperature: 1.0,
+          temperature: 0.8,
           maxOutputTokens: 8192
         },
         safetySettings: [
