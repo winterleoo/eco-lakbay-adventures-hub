@@ -40,7 +40,7 @@ const HeroSection = () => {
               Adventures
             </h1>
             <p className="text-xl md:text-2xl mb-8 text-white/90 leading-relaxed">
-              Explore Pampanga's hidden gems while protecting the environment. 
+              Explore Pampanga's beauty while protecting the environment. 
               Earn Green Points, reduce your carbon footprint, and connect with local communities.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
