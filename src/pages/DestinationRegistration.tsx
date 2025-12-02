@@ -14,6 +14,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { PermitUpload } from "@/components/PermitUpload";
 import { ImageUploader, ImageUploaderRef } from "@/components/ImageUploader";
 import { Loader2, CheckCircle, Building, MapPin, Phone, Mail, Globe, Star, FileCheck, Camera } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Lock, Unlock } from "lucide-react";
+import { Clock } from "lucide-react"; // Import a new icon for the section
 
 const DestinationRegistration = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,6 +34,9 @@ const DestinationRegistration = () => {
     businessName: "", businessType: "", description: "", address: "",
     city: "", province: "", phone: "", email: "", website: "",
     sustainabilityPractices: "",
+     listingType: "private",
+         operatingHours: "", // New
+    peakDays: "", 
   });
 
   const handleInputChange = (field: string, value: string) => {
@@ -56,6 +63,8 @@ const DestinationRegistration = () => {
         description: formData.description, address: formData.address, city: formData.city,
         province: formData.province, phone: formData.phone || null, email: formData.email,
         website: formData.website || null, sustainability_practices: formData.sustainabilityPractices || null,
+          listing_type: formData.listingType,    operating_hours: formData.operatingHours || null, // New
+        peak_days: formData.peakDays || null,    
       }).select('id').single();
       
       if (error) throw error;
@@ -89,8 +98,12 @@ const DestinationRegistration = () => {
 
       if (error) {
         toast({ title: "Error Saving Photos", description: error.message, variant: "destructive" });
+      }  
+      if (formData.listingType === 'public') {
+        setStep('complete');
       } else {
-        setStep('permits'); // Only proceed to permits on success
+        // Otherwise, proceed to the permits step as normal.
+        setStep('permits');
       }
     }
     setIsSubmitting(false);
@@ -117,7 +130,31 @@ const DestinationRegistration = () => {
             </CardHeader>
             <CardContent>
               {step === 'info' && (
+                
                 <div className="space-y-6">
+                  
+                  {/* --- NEW ---: Add Listing Type selection */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-forest">Listing Type</h3>
+                    <RadioGroup 
+                        defaultValue="private" 
+                        onValueChange={(value: "private" | "public") => handleInputChange("listingType", value)}
+                        className="grid md:grid-cols-2 gap-4"
+                    >
+                      <Label htmlFor="private-listing" className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary cursor-pointer">
+                        <RadioGroupItem value="private" id="private-listing" className="sr-only" />
+                        <Lock className="w-8 h-8 mb-2" />
+                        <span className="font-semibold">Private Establishment</span>
+                        <span className="text-sm text-muted-foreground text-center">e.g., Hotel, Restaurant, Resort. Requires business permits for verification.</span>
+                      </Label>
+                      <Label htmlFor="public-listing" className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary cursor-pointer">
+                        <RadioGroupItem value="public" id="public-listing" className="sr-only" />
+                        <Unlock className="w-8 h-8 mb-2" />
+                        <span className="font-semibold">Public Destination</span>
+                        <span className="text-sm text-muted-foreground text-center">e.g., National Park, Trail, Public Beach. No business permits required.</span>
+                      </Label>
+                    </RadioGroup>
+                  </div>
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold text-forest">Business Information</h3>
                     <div className="grid md:grid-cols-2 gap-4">
@@ -143,6 +180,32 @@ const DestinationRegistration = () => {
                   <div className="space-y-4"><h3 className="text-lg font-semibold text-forest">Sustainability Practices</h3>
                     <div className="space-y-2"><Label htmlFor="sustainabilityPractices">Tell us about your environmental initiatives</Label><Textarea id="sustainabilityPractices" placeholder="Describe your eco-friendly practices, waste reduction efforts, community involvement, etc." className="min-h-[120px]" value={formData.sustainabilityPractices} onChange={(e) => handleInputChange("sustainabilityPractices", e.target.value)} /></div>
                   </div>
+                      {/* --- NEW ---: Add Operating Hours & Peak Days section */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-forest flex items-center gap-2">
+                        <Clock className="w-5 h-5" /> Operating Information
+                    </h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="operatingHours">Operating Hours</Label>
+                        <Input 
+                            id="operatingHours" 
+                            placeholder="e.g., 9:00 AM - 5:00 PM, Tue-Sun" 
+                            value={formData.operatingHours} 
+                            onChange={(e) => handleInputChange("operatingHours", e.target.value)} 
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="peakDays">Peak Days / Season</Label>
+                        <Input 
+                            id="peakDays" 
+                            placeholder="e.g., Weekends, December-February" 
+                            value={formData.peakDays} 
+                            onChange={(e) => handleInputChange("peakDays", e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
                   <div className="flex justify-end pt-6 border-t">
                     <Button type="button" size="lg" onClick={handleSaveAndContinue} disabled={isSubmitting}>{isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save & Continue to Photos</Button>
                   </div>
@@ -162,11 +225,23 @@ const DestinationRegistration = () => {
                   </div>
                 </div>
               )}
+               {/* --- MODIFIED ---: The permit step UI has a "Skip" button for public listings */}
               {step === 'permits' && user && createdDestinationId && (
                 <div className="space-y-6">
+                   <Alert>
+                      <FileCheck className="h-4 w-4" />
+                      <AlertTitle>Verification Documents</AlertTitle>
+                      <AlertDescription>
+                        As a private establishment, you are required to upload business permits for verification. This ensures trust and safety within the EcoLakbay community.
+                      </AlertDescription>
+                  </Alert>
+
                   <PermitUpload userId={user.id} destinationId={createdDestinationId} onPermitsUploaded={() => setStep('complete')} />
+                  
                   <div className="flex justify-between pt-6 border-t">
                     <Button type="button" variant="outline" onClick={() => setStep('photos')}>Back to Photos</Button>
+                    {/* Allow skipping if it was mistakenly set to private */}
+                    <Button type="button" variant="ghost" onClick={() => setStep('complete')}>Skip for now</Button>
                   </div>
                 </div>
               )}

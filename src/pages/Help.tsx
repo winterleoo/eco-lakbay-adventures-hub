@@ -8,7 +8,7 @@ const Help = () => {
   const faqItems = [
     {
       question: "How do I calculate my carbon footprint?",
-      answer: "Use our Carbon Calculator tool to input your travel details including transportation method, distance, accommodation type, and activities. The calculator will provide an estimate of your carbon emissions and suggest ways to reduce them."
+      answer: "Use our Carbon Calculator tool to input your travel details including transportation method, and distance. The calculator will provide an estimate of your carbon emissions and suggest ways to reduce them."
     },
     {
       question: "How can I register my business as an eco-destination?",
@@ -40,54 +40,6 @@ const Help = () => {
             <p className="text-lg text-muted-foreground">
               Find answers to common questions and get support for using EcoLakbay
             </p>
-          </div>
-
-          {/* Quick Support Cards */}
-          <div className="grid md:grid-cols-3 gap-6 mb-12">
-            <Card className="text-center hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <MessageCircle className="w-8 h-8 text-accent mx-auto mb-2" />
-                <CardTitle className="text-lg">Live Chat</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Get instant help from our support team
-                </p>
-                <button className="bg-accent text-white px-4 py-2 rounded-lg hover:bg-accent/90 transition-colors">
-                  Start Chat
-                </button>
-              </CardContent>
-            </Card>
-            
-            <Card className="text-center hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <Mail className="w-8 h-8 text-accent mx-auto mb-2" />
-                <CardTitle className="text-lg">Email Support</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Send us a detailed message
-                </p>
-                <button className="bg-accent text-white px-4 py-2 rounded-lg hover:bg-accent/90 transition-colors">
-                  Send Email
-                </button>
-              </CardContent>
-            </Card>
-            
-            <Card className="text-center hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <Phone className="w-8 h-8 text-accent mx-auto mb-2" />
-                <CardTitle className="text-lg">Phone Support</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Call us during business hours
-                </p>
-                <button className="bg-accent text-white px-4 py-2 rounded-lg hover:bg-accent/90 transition-colors">
-                  Call Now
-                </button>
-              </CardContent>
-            </Card>
           </div>
 
           {/* FAQ Section */}

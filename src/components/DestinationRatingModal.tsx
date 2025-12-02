@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { logAction } from '@/utils/logging';
 
 interface DestinationRatingModalProps {
   isOpen: boolean;
@@ -171,6 +172,12 @@ export const DestinationRatingModal = ({ isOpen, onClose, destination }: Destina
 
       const { error } = await operation;
       if (error) throw error;
+      // Log the calculated overall score, not the non-existent 'rating' variable.
+await logAction('new_rating_submitted', {
+  destinationId: destination.id,
+  destinationName: destination.business_name,
+  rating: overallRating.score, // Use the correct variable here
+});
       
       toast({ title: "Rating Submitted!", description: `Thank you for rating ${destination?.business_name || destination?.name}.` });
       onClose();

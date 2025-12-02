@@ -9,6 +9,7 @@ import SignInModal from "./SignInModal";
 import JoinUsModal from "./JoinUsModal";
 import { LogOut, User, Settings, Shield, MapPin } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const Navigation = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -20,6 +21,28 @@ const Navigation = () => {
   const [hasDestinations, setHasDestinations] = useState(false);
 
   const isSuperAdmin = user?.email === 'johnleomedina@gmail.com' && isAdmin;
+
+    const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        // Even if an error occurs, we still want to log the user out client-side.
+        // We can show a toast for debugging but should still proceed.
+        console.error("Error during sign out:", error);
+        toast({
+          title: "Logout Error",
+          description: "Could not contact the server, but you have been logged out locally.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error("Unexpected error during sign out:", error);
+    } finally {
+      // This part ALWAYS runs, whether there was an error or not.
+      // This ensures the user is redirected to the home page after logging out.
+      navigate("/");
+    }
+  };
 
   useEffect(() => {
     setHasDestinations(false);
@@ -84,7 +107,7 @@ const Navigation = () => {
                     <DropdownMenuItem onClick={() => navigate("/dashboard")}><Settings className="w-4 h-4 mr-2" />Dashboard</DropdownMenuItem>
                     {isSuperAdmin && (<DropdownMenuItem onClick={() => navigate("/super-admin")}><Shield className="w-4 h-4 mr-2" />Super Admin</DropdownMenuItem>)}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={signOut}><LogOut className="w-4 h-4 mr-2" />Sign Out</DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleLogout}><LogOut className="w-4 h-4 mr-2" />Sign Out</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (

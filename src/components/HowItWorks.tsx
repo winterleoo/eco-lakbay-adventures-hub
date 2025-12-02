@@ -5,7 +5,7 @@ const steps = [
   {
     icon: <Search className="w-8 h-8 text-forest" />,
     title: "1. Discover",
-    description: "Explore our curated list of eco-certified destinations, handpicked for their commitment to sustainability and community.",
+    description: "Explore our curated list of destinations, handpicked for their commitment to sustainability and community.",
   },
   {
     icon: <Map className="w-8 h-8 text-forest" />,

@@ -18,9 +18,7 @@ const Footer = () => {
       title: "For Businesses",
       links: [
         { label: "Register Business", path: "/register-destination" },
-        { label: "Eco Certification", path: "/certification" },
-        { label: "Partner Program", path: "/partners" },
-        { label: "Resources", path: "/business-resources" }
+        
       ]
     },
     {
@@ -44,24 +42,6 @@ const Footer = () => {
   return (
     <footer className="bg-forest text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        {/* --- 1. New Newsletter CTA Section --- */}
-        <div className="py-12 border-b border-white/20 flex flex-col lg:flex-row justify-between items-center gap-8">
-          <div className="text-center lg:text-left">
-            <h2 className="text-2xl font-bold mb-2">Join the Sustainable Movement</h2>
-            <p className="text-white/80">Get the latest eco-travel tips, featured destinations, and community news delivered to your inbox.</p>
-          </div>
-          <form className="w-full max-w-md flex gap-2">
-            <Input 
-              type="email" 
-              placeholder="Enter your email" 
-              className="bg-white/10 border-white/20 placeholder:text-white/60 text-white flex-1"
-              aria-label="Email for newsletter"
-            />
-            <Button variant="gold" type="submit">Subscribe</Button>
-          </form>
-        </div>
-
         {/* --- 2. Modernized Main Footer Layout --- */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8 py-16">
           {/* Brand Section */}

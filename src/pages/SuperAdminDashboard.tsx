@@ -13,10 +13,37 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"; // --- THIS IS THE FIX ---
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, Shield, TrendingUp, Activity, Search, Plus, Edit, BarChart3, Trash2, Clock, PieChart as PieChartIcon, MapPin } from "lucide-react";
+import { MoreHorizontal, Users, Shield, TrendingUp, Activity, Search, Plus, Edit, BarChart3, Trash2, Clock, PieChart as PieChartIcon, MapPin } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend, XAxis, YAxis, CartesianGrid } from "recharts";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Edit2, Archive, FileText, Download, Loader2, Star, CheckCircle, XCircle } from "lucide-react";
+interface Destination {
+  id: string;
+  business_name: string;
+  city: string;
+  province: string;
+  status: 'pending' | 'approved' | 'rejected' | 'archived';
+  admin_profile: {
+    full_name: string;
+  } | null;
+}
+const statusColors: { [key: string]: 'default' | 'secondary' | 'destructive' | 'outline' } = {
+  pending: 'secondary', approved: 'default', rejected: 'destructive', archived: 'outline',
+};
+interface LogEntry {
+  id: number;
+  created_at: string;
+  action: string;
+  details: { [key: string]: any; };
+  profiles: { full_name: string; } | null;
+}
 
 const SuperAdminDashboard = () => {
   const { user } = useAuth();
@@ -31,7 +58,16 @@ const SuperAdminDashboard = () => {
     pendingDestinations: 0
   });
   const [userGrowthChartData, setUserGrowthChartData] = useState<any[]>([]);
+  const [destinations, setDestinations] = useState<Destination[]>([]); // --- MODIFIED ---
   const [destinationStatusChartData, setDestinationStatusChartData] = useState<any[]>([]);
+    const [activityLog, setActivityLog] = useState<LogEntry[]>([]);
+  
+
+     const [statusChangeLog, setStatusChangeLog] = useState<LogEntry[]>([]);
+    const [logPage, setLogPage] = useState(1);
+    const [hasMoreLogs, setHasMoreLogs] = useState(true);
+    const [loadingMoreLogs, setLoadingMoreLogs] = useState(false);
+    const [loadingData, setLoadingData] = useState(true);
 
   const isSuperAdmin = user?.email === 'johnleomedina@gmail.com' && isAdmin;
 
@@ -41,14 +77,90 @@ const SuperAdminDashboard = () => {
     }
   }, [isSuperAdmin]);
 
-  const fetchAllData = async () => {
-    try {
-      await Promise.all([fetchUsers(), fetchStats(), fetchChartData()]);
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      toast({ title: "Error", description: "Failed to load all dashboard data.", variant: "destructive" });
-    }
-  };
+   // --- MODIFIED ---: Modify the destinations fetch query
+     const fetchAllData = async () => {
+      setLogPage(1); // Reset pagination on full refresh
+            setHasMoreLogs(true);
+        setLoadingData(true); // Assuming you have setLoading defined
+        try {
+            // Fetch users and roles
+            const { data: profiles, error: profilesError } = await supabase.from('profiles').select('*').order('full_name', { ascending: true });
+            if (profilesError) throw profilesError;
+            const { data: userRoles, error: rolesError } = await supabase.from('user_roles').select('user_id, role');
+            if (rolesError) throw rolesError;
+            const usersWithRoles = profiles.map(p => ({ ...p, role: userRoles.find(ur => ur.user_id === p.user_id)?.role || 'user' }));
+            setUsers(usersWithRoles);
+
+            // Fetch destinations and logs in parallel for efficiency
+            const [destResponse, logResponse, usersResponse] = await Promise.all([
+                supabase.from('destinations').select(`*, admin_profile:admin_id(full_name)`).order('created_at', { ascending: false }),
+                supabase
+                    .from('audit_log')
+                    .select(`*, profiles(full_name)`)
+                    .eq('action', 'destination_status_changed') // THE KEY FILTER
+                    .order('created_at', { ascending: false })
+                    .limit(10) // Let's show 10 initially
+            ]);
+
+            if (destResponse.error) throw destResponse.error;
+            setDestinations(destResponse.data as Destination[] || []);
+   if (logResponse.error) throw logResponse.error;
+            setStatusChangeLog(logResponse.data || []);
+            if ((logResponse.data || []).length < 10) {
+                setHasMoreLogs(false);
+            }
+            
+            // Fetch stats and charts
+            await fetchStats();
+            await fetchChartData(profiles || []);
+
+        } catch (error: any) {
+            toast({ title: "Error fetching data", description: error.message, variant: "destructive" });
+        } finally {
+            setLoading(false); // Assuming you have this state
+        }
+    };
+    
+    useEffect(() => {
+        if (isSuperAdmin) fetchAllData();
+    }, [isSuperAdmin]);
+      const formatLogEntry = (log: LogEntry) => {
+        let icon = <XCircle className="h-4 w-4 text-red-500" />;
+        if (log.details.status === 'approved') icon = <CheckCircle className="h-4 w-4 text-green-500" />;
+        if (log.details.status === 'archived') icon = <Archive className="h-4 w-4 text-muted-foreground" />;
+
+        const message = <span>{log.profiles?.full_name || 'An admin'}</span>;
+        const actionText = ` ${log.details.status} "${log.details.destinationName}".`;
+
+        return { icon, message: <>{message}{actionText}</> };
+    };
+
+     // --- NEW ---: A specific function for loading more status logs
+    const loadMoreStatusLogs = async () => {
+        if (loadingMoreLogs || !hasMoreLogs) return;
+        setLoadingMoreLogs(true);
+        
+        const from = logPage * 10;
+        const to = from + 9;
+
+        const { data: newLogs, error } = await supabase
+            .from('audit_log')
+            .select(`*, profiles(full_name)`)
+            .eq('action', 'destination_status_changed')
+            .order('created_at', { ascending: false })
+            .range(from, to);
+            
+        if (error) {
+            toast({ title: "Error", description: "Could not load more logs.", variant: "destructive" });
+        } else if (newLogs) {
+            setStatusChangeLog(prev => [...prev, ...newLogs]);
+            setLogPage(prev => prev + 1);
+            if (newLogs.length < 10) {
+                setHasMoreLogs(false);
+            }
+        }
+        setLoadingMoreLogs(false);
+    };
 
   const fetchUsers = async () => {
     const { data: profiles, error: profilesError } = await supabase.from('profiles').select('*').order('full_name', { ascending: true });
@@ -197,7 +309,11 @@ const SuperAdminDashboard = () => {
             </Card>
           </div>
 
-          <Card>
+                          
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div className="lg:col-span-3 space-y-8">
+                        <Card>
             <CardHeader>
               <CardTitle>User Management</CardTitle>
               <div className="flex items-center space-x-2">
@@ -260,6 +376,38 @@ const SuperAdminDashboard = () => {
             </CardContent>
           </Card>
         </div>
+                        </div>
+                        
+                        <div className="lg:col-span-1 space-y-8">
+                            <Card>
+                               <CardHeader><CardTitle>Destination Status Log</CardTitle></CardHeader>
+                               <CardContent>
+                                   <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                                       {statusChangeLog.length > 0 ? statusChangeLog.map(log => {
+                                           const { icon, message } = formatLogEntry(log);
+                                           return (
+                                               <div key={log.id} className="flex items-start gap-3 text-sm">
+                                                   <div className="mt-1">{icon}</div>
+                                                   <div className="flex-1">
+                                                       <p>{message}</p>
+                                                       <p className="text-xs text-muted-foreground">{new Date(log.created_at).toLocaleString()}</p>
+                                                   </div>
+                                               </div>
+                                           );
+                                       }) : (<p className="text-center text-muted-foreground py-8">No status changes found.</p>)}
+                                   </div>
+                                   {hasMoreLogs && (
+                                     <div className="text-center mt-4">
+                                       <Button onClick={loadMoreStatusLogs} disabled={loadingMoreLogs} variant="outline">
+                                         {loadingMoreLogs ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>) : ('View More')}
+                                       </Button>
+                                     </div>
+                                   )}
+                               </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                
       </main>
       <Footer />
     </div>

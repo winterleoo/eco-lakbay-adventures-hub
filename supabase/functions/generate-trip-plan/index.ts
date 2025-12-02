@@ -1,85 +1,149 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-const groqApiKey = Deno.env.get('GROQ_API_KEY');
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-interface TripPlanRequest {
-  duration: string;
-  budget: string;
-  interests: string[];
-  travelStyle: string;
-  groupSize: number;
-}
-
-serve(async (req) => {
-  // Handle CORS preflight requests
+const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+// A secure, specific list of allowed origins
+const allowedOrigins = [
+  'https://www.eco-lakbay.com',
+  'https://eco-lakbay.com',
+  'https://eco-lakbay-adventures-hub.vercel.app/',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+serve(async (req)=>{
+  // Dynamic CORS header generation
+  const origin = req.headers.get('Origin') || '';
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  };
+  // Handle preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", {
+      headers: corsHeaders
+    });
   }
-
   try {
-    const { duration, budget, interests, travelStyle, groupSize }: TripPlanRequest = await req.json();
+    if (!geminiApiKey) {
+      throw new Error("GEMINI_API_KEY is not set in the function's environment variables.");
+    }
+    const { startingPoint, duration, interests, travelStyle, groupSize } = await req.json();
+    const systemPrompt = `You are an expert travel planner for EcoLakbay, a platform focused on sustainable tourism in Pampanga, Philippines. Your goal is to generate a personalized, day-by-day travel itinerary based on the user's preferences.
 
-    const prompt = `Create a detailed eco-friendly trip plan for Pampanga, Philippines with the following preferences:
-    
-Duration: ${duration}
-Budget: ${budget}
-Interests: ${interests.join(', ')}
-Travel Style: ${travelStyle}
-Group Size: ${groupSize} people
+    **Instructions:**
+    1.  **Prioritize the Starting Point:** The entire itinerary MUST begin from, and logically flow around, the user's specified starting point. All travel times should consider this.
+    2.  **Be Specific:** Mention real places, eco-lodges, local restaurants, and sustainable activities available in Pampanga.
+    3.  **Promote Sustainability:** Weave in eco-friendly tips.
+    4.  **Format with Markdown:** Use headings (e.g., "# Day 1: ..."), bold text, and bullet points.
+    5.  **Be Friendly and Engaging:** Write in a welcoming and inspiring tone.`;
+    const userPrompt = `
+      Please create a sustainable travel plan for me in Pampanga, Philippines with the following preferences:
+      
+      - **My Starting Point/Accommodation:** ${startingPoint}
+      - **Trip Duration:** ${duration}
 
-Please include:
-1. Day-by-day itinerary with specific eco-friendly destinations in Pampanga
-2. Sustainable accommodation recommendations
-3. Local eco-friendly activities and attractions
-4. Transportation suggestions that minimize carbon footprint
-5. Local sustainable restaurants and food experiences
-6. Estimated costs breakdown
-7. Tips for responsible tourism and supporting local communities
-8. Carbon footprint considerations and how to minimize impact
+      - **Group Size:** ${groupSize} person(s)
+      - **My Travel Style:** ${travelStyle}
+      - **My Interests:** ${interests.join(', ')}
 
-Focus on authentic Pampanga experiences that benefit local communities and preserve the environment.`;
-
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      Please structure the response as a clear, day-by-day itinerary that is easy to follow.`;
+    const contents = [
+      {
+        role: 'user',
+        parts: [
+          {
+            text: systemPrompt
+          }
+        ]
+      },
+      {
+        role: 'model',
+        parts: [
+          {
+            text: "Understood. I am ready to create a sustainable travel itinerary for Pampanga."
+          }
+        ] // A simple priming response.
+      },
+      {
+        role: 'user',
+        parts: [
+          {
+            text: userPrompt
+          }
+        ]
+      }
+    ];
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${groqApiKey}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'llama3-8b-8192',
-        messages: [
-          { 
-            role: 'system', 
-            content: 'You are an expert eco-tourism travel planner specializing in sustainable travel in Pampanga, Philippines. Create detailed, practical trip plans that emphasize environmental responsibility, local community support, and authentic cultural experiences.' 
+        contents,
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: 8192
+        },
+        safetySettings: [
+          {
+            category: "HARM_CATEGORY_HARASSMENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
           },
-          { role: 'user', content: prompt }
-        ],
-        max_tokens: 2000,
-        temperature: 0.7,
-      }),
+          {
+            category: "HARM_CATEGORY_HATE_SPEECH",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          }
+        ]
+      })
     });
-
     if (!response.ok) {
-      throw new Error(`Groq API error: ${response.status}`);
+      const errorBody = await response.text();
+      throw new Error(`Gemini API error: ${response.status} - ${errorBody}`);
     }
-
     const data = await response.json();
-    const tripPlan = data.choices[0].message.content;
-
-    return new Response(JSON.stringify({ tripPlan }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    // --- THIS IS THE FIX ---
+    // Safely access the first candidate using optional chaining.
+    const candidate = data?.candidates?.[0];
+    // Check if the candidate exists. If not, it was likely blocked by safety settings.
+    if (!candidate) {
+      // Log the full response for debugging purposes in your Supabase logs.
+      console.error("Gemini response was blocked or empty. Full response:", JSON.stringify(data, null, 2));
+      throw new Error("The request was blocked by the AI's safety filters. Please try rephrasing your interests.");
+    }
+    // Safely access the text content.
+    const tripPlanPart = candidate?.content?.parts?.[0];
+    const tripPlan = tripPlanPart?.text;
+    // Check if the text content exists.
+    if (!tripPlan) {
+      console.error("Gemini response was valid but contained no text. Full candidate:", JSON.stringify(candidate, null, 2));
+      throw new Error("The AI returned an empty plan. Please try again.");
+    }
+    // --- END OF FIX ---
+    return new Response(JSON.stringify({
+      tripPlan
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
     });
   } catch (error) {
-    console.error('Error in generate-trip-plan function:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error('Error in trip planner function:', error.message);
+    return new Response(JSON.stringify({
+      error: error.message
+    }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
     });
   }
 });

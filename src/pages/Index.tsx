@@ -1,33 +1,41 @@
 import Navigation from "@/components/Navigation";
 import HeroSection from "@/components/HeroSection";
 import StatsSection from "@/components/StatsSection";
-import DestinationsPreview from "@/components/DestinationsPreview";
-import Footer from "@/components/Footer";
-
-// --- NEW COMPONENTS TO CREATE (code will be provided below) ---
+import QuizSection from "@/components/QuizSection";
+import VideosSection from "@/components/VideosSection";
 import HowItWorks from "@/components/HowItWorks";
 import CTASection from "@/components/CTASection";
+import Footer from "@/components/Footer";
+import Destinations from "@/pages/Destinations"; 
+import MapSection from "@/components/MapSection"; // 👈 new import
 
 const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
-      
-      {/* 1. Hero: Your inspiring welcome message. */}
       <HeroSection />
-
-      {/* 2. Stats: Immediate proof of your impact. */}
-      <StatsSection />
-
-      {/* 3. Destinations: Your core product, the main event. */}
-      <DestinationsPreview />
-
-      {/* 4. How It Works: A simple, clear guide for the user. */}
-      <HowItWorks />
-
-      {/* 5. Final Call to Action: A clear final prompt before the footer. */}
-      <CTASection />
+      <section className="py-16 md:py-20 bg-background">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16 md:space-y-20">
+            <StatsSection />
+            
+            {/* --- THIS IS THE FIX --- */}
+            {/* The unified component is now properly wrapped for correct styling and layout */}
+            <div>
+              <div className="text-center mb-16">
+                <h2 className="text-3xl md:text-4xl font-bold text-forest mb-4">Featured Eco-Destinations</h2>
+                <p className="text-xl text-muted-foreground max-w-2xl mx-auto">Discover top-rated sustainable destinations verified by our program.</p>
+              </div>
+              {/* We pass the props to render it in "preview" mode */}
+              <Destinations isPreview={true} limit={3} />
+            </div>
+          </div>
+        </section>
       
+      
+      <QuizSection />
+      <VideosSection />
+      <HowItWorks />
+      <CTASection />
       <Footer />
     </div>
   );

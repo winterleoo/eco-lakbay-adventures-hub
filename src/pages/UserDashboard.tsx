@@ -8,14 +8,57 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Award, Medal, Trophy } from "lucide-react";
+// --- NEW ---: Import the new modal
+import { LeaderboardModal } from "@/components/LeaderboardModal"; 
+
+// --- NEW ---: Gamification and Leveling System
+const levels = [
+  { name: "Eco Starter", points: 0, icon: <Award className="h-5 w-5 text-yellow-600"/> },
+  { name: "Green Apprentice", points: 100, icon: <Award className="h-5 w-5 text-yellow-600"/> },
+  { name: "Trailblazer", points: 500, icon: <Medal className="h-5 w-5 text-gray-400"/> },
+  { name: "Eco Warrior", points: 1500, icon: <Medal className="h-5 w-5 text-gray-400"/> },
+  { name: "Planet Guardian", points: 5000, icon: <Trophy className="h-5 w-5 text-amber-400"/> },
+];
+
+const getUserLevel = (points: number) => {
+  let currentLevel = levels[0];
+  for (let i = levels.length - 1; i >= 0; i--) {
+    if (points >= levels[i].points) {
+      currentLevel = levels[i];
+      break;
+    }
+  }
+  const nextLevel = levels.find(l => l.points > currentLevel.points);
+  return { currentLevel, nextLevel };
+};
+
+// --- Profile Interface for type safety ---
+interface Profile {
+  user_id: string;
+  full_name: string;
+  email: string;
+  avatar_url: string;
+  points: number;
+}
+interface LeaderboardUser {
+  user_id: string;
+  full_name: string;
+  points: number;
+  avatar_url?: string;
+}
 
 const UserDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [profile, setProfile] = useState<any>(null);
-  const [userDestinations, setUserDestinations] = useState<any[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [userRank, setUserRank] = useState<number | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [isLeaderboardModalOpen, setIsLeaderboardModalOpen] = useState(false);
+  const [fullLeaderboard, setFullLeaderboard] = useState<LeaderboardUser[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -24,114 +67,176 @@ const UserDashboard = () => {
   }, [user]);
 
   const loadUserData = async () => {
+    if (!user) return;
     setLoadingData(true);
     try {
-      const { data: profileData } = await supabase.from('profiles').select('*').eq('user_id', user!.id).single();
-      setProfile(profileData);
-      const { data: destData } = await supabase.from('destinations').select('*').eq('owner_id', user!.id).order('created_at', { ascending: false });
-      setUserDestinations(destData || []);
+      // Fetch profile, rank, and leaderboard in parallel
+      const [profileResponse, rankResponse, leaderboardResponse] = await Promise.all([
+        supabase.from('profiles').select('*').eq('user_id', user.id).single(),
+        supabase.rpc('get_user_rank', { p_user_id: user.id }),
+        supabase.from('profiles').select('full_name, points').order('points', { ascending: false, nullsLast: true }).limit(5)
+      ]);
+
+      if (profileResponse.error) throw profileResponse.error;
+      setProfile(profileResponse.data);
+      
+      if (rankResponse.error) throw rankResponse.error;
+      setUserRank(rankResponse.data);
+
+      if (leaderboardResponse.error) throw leaderboardResponse.error;
+      setLeaderboard(leaderboardResponse.data);
+      
     } catch (error) {
       console.error("Error fetching user data:", error);
     } finally {
       setLoadingData(false);
     }
   };
+  const fetchFullLeaderboard = async () => {
+    setIsLeaderboardModalOpen(true);
+    setLeaderboardLoading(true);
+    try {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('user_id, full_name, points, avatar_url')
+            .order('points', { ascending: false, nullsLast: true });
 
-  if (loadingData) {
-    return (
-        <div className="min-h-screen bg-background flex flex-col">
-            <Navigation />
-            <div className="flex-grow flex items-center justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-forest"></div>
-            </div>
-            <Footer />
-        </div>
-    );
-  }
+        if (error) throw error;
+        setFullLeaderboard(data || []);
+    } catch (error) {
+        console.error("Error fetching full leaderboard:", error);
+    } finally {
+        setLeaderboardLoading(false);
+    }
+  };
 
-  const userName = profile?.full_name || user?.email?.split('@')[0] || 'User';
-  const userStats = { name: userName, greenPoints: profile?.points || 0, level: "Eco Starter", tripsCompleted: userDestinations.filter(d => d.status === 'approved').length, carbonSaved: 0, rank: 0, nextLevelPoints: 500 };
-  const recentDestinations = userDestinations.slice(0, 3).map(dest => ({ destination: dest.business_name, date: new Date(dest.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }), status: dest.status, type: dest.business_type }));
-  const achievements = [ { title: "First Eco Trip", icon: "🌱", unlocked: true }, { title: "Carbon Saver", icon: "🌍", unlocked: true }, { title: "Community Helper", icon: "🤝", unlocked: true }, { title: "Green Ambassador", icon: "🏆", unlocked: false }, { title: "Eco Master", icon: "🌟", unlocked: false }, { title: "Planet Protector", icon: "🛡️", unlocked: false } ];
-  const levelProgress = userStats.nextLevelPoints > 0 ? (userStats.greenPoints / userStats.nextLevelPoints) * 100 : 0;
+  if (loadingData || !profile) { /* ... your loading component ... */ }
+
+  const userName = profile?.full_name || 'Eco Traveler';
+  const userPoints = profile?.points || 0;
+  const { currentLevel, nextLevel } = getUserLevel(userPoints);
   
+  const progressToNextLevel = nextLevel 
+    ? ((userPoints - currentLevel.points) / (nextLevel.points - currentLevel.points)) * 100 
+    : 100;
+
   return (
+    <>
     <div className="min-h-screen bg-background">
       <Navigation />
+      {/* --- Header Section --- */}
       <div className="bg-gradient-hero py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center space-x-6">
-                <Avatar className="w-20 h-20"><AvatarFallback className="bg-white text-forest text-2xl font-bold">{userName.split(' ').map(n => n[0]).join('')}</AvatarFallback></Avatar>
-                <div><h1 className="text-4xl font-bold mb-2">Welcome back, {userName}!</h1><p className="text-xl text-white/90">Level: {userStats.level} • Rank #{userStats.rank} globally</p></div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center space-x-6">
+          <Avatar className="w-20 h-20 border-4 border-white/50">
+            <AvatarFallback className="bg-white text-forest text-2xl font-bold">{userName.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+          </Avatar>
+          <div>
+            <h1 className="text-4xl font-bold mb-1 text-white">Welcome back, {userName}!</h1>
+            <div className="flex items-center gap-3">
+              {currentLevel.icon}
+              <p className="text-xl text-white/90">{currentLevel.name}</p>
             </div>
+          </div>
         </div>
       </div>
+
       <div className="py-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-6">
-                    <Card className="shadow-eco">
-                        <CardHeader><CardTitle className="text-2xl text-forest">Green Wallet</CardTitle></CardHeader>
-                        <CardContent>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div className="text-center"><div className="text-3xl font-bold text-amber mb-2">{userStats.greenPoints.toLocaleString()}</div><div className="text-sm text-muted-foreground">Green Points</div></div>
-                                <div className="text-center"><div className="text-3xl font-bold text-forest mb-2">{userStats.tripsCompleted}</div><div className="text-sm text-muted-foreground">Eco Trips</div></div>
-                                <div className="text-center"><div className="text-3xl font-bold text-nature mb-2">{userStats.carbonSaved}kg</div><div className="text-sm text-muted-foreground">CO₂ Saved</div></div>
-                            </div>
-                            <div className="mt-6">
-                                <div className="flex justify-between items-center mb-2"><span className="text-sm font-medium">Progress to {userStats.level} Pro</span><span className="text-sm text-muted-foreground">{userStats.greenPoints}/{userStats.nextLevelPoints}</span></div>
-                                <Progress value={levelProgress} className="h-3" />
-                                <div className="text-xs text-muted-foreground mt-1">{userStats.nextLevelPoints - userStats.greenPoints} points to next level</div>
-                            </div>
-                            <div className="mt-6 flex gap-3"><Button variant="eco" className="flex-1">Redeem Points</Button><Button variant="outline" className="flex-1">View Rewards</Button></div>
-                        </CardContent>
-                    </Card>
-                    <Card className="shadow-eco">
-                        <CardHeader><CardTitle className="text-xl text-forest">Your Registered Destinations</CardTitle></CardHeader>
-                        <CardContent>
-                            <div className="space-y-4">{recentDestinations.length > 0 ? (recentDestinations.map((dest, index) => (<div key={index} className="flex items-center justify-between p-4 bg-gradient-card rounded-lg">
-                                <div className="flex items-center space-x-4">
-                                    <div className="text-2xl">{dest.type === 'hotel' ? "🏨" : dest.type === 'restaurant' ? "🍽️" : dest.type === 'attraction' ? "🏞️" : "🏢"}</div>
-                                    <div><h4 className="font-semibold text-forest">{dest.destination}</h4><p className="text-sm text-muted-foreground">Registered {dest.date}</p></div>
-                                </div>
-                                <div className="text-right"><Badge variant={dest.status === 'approved' ? 'default' : dest.status === 'pending' ? 'secondary' : 'destructive'}>{dest.status}</Badge></div>
-                            </div>))) : (<div className="text-center py-8 text-muted-foreground"><p>No destinations registered yet.</p><Button variant="outline" className="mt-4" onClick={() => navigate('/register-destination')}>Register Your First Destination</Button></div>)}</div>
-                            {recentDestinations.length > 0 && (<Button variant="outline" className="w-full mt-4">View All Destinations</Button>)}
-                        </CardContent>
-                    </Card>
-                </div>
-                <div className="space-y-6">
-                    <Card className="shadow-eco">
-                        <CardHeader><CardTitle className="text-xl text-forest">Achievements</CardTitle></CardHeader>
-                        <CardContent>
-                            <div className="grid grid-cols-3 gap-3">{achievements.map((achievement, index) => (<div key={index} className="text-center"><div className={`text-2xl mb-2 ${achievement.unlocked ? '' : 'grayscale opacity-40'}`}>{achievement.icon}</div><div className={`text-xs ${achievement.unlocked ? 'text-forest' : 'text-muted-foreground'}`}>{achievement.title}</div></div>))}</div>
-                            <Button variant="outline" size="sm" className="w-full mt-4">View All Badges</Button>
-                        </CardContent>
-                    </Card>
-                    <Card className="shadow-eco">
-                        <CardHeader><CardTitle className="text-xl text-forest">Your Ranking</CardTitle></CardHeader>
-                        <CardContent>
-                            <div className="text-center"><div className="text-4xl mb-4">🏆</div><div className="text-2xl font-bold text-amber mb-2">#{userStats.rank}</div><div className="text-sm text-muted-foreground mb-4">Global Eco Ranking</div><Badge variant="secondary" className="bg-gradient-accent text-white">Top 1% Eco Travelers</Badge></div>
-                            <Button variant="eco" size="sm" className="w-full mt-4">View Leaderboard</Button>
-                        </CardContent>
-                    </Card>
-                    <Card className="shadow-eco">
-                        <CardHeader><CardTitle className="text-xl text-forest">Quick Actions</CardTitle></CardHeader>
-                        <CardContent>
-                            <div className="space-y-3">
-                                <Button variant="outline" size="sm" className="w-full justify-start">🗺️ Plan New Trip</Button>
-                                <Button variant="outline" size="sm" className="w-full justify-start">🧮 Calculate Carbon</Button>
-                                <Button variant="outline" size="sm" className="w-full justify-start">📝 Write Review</Button>
-                                <Button variant="outline" size="sm" className="w-full justify-start">🎁 Redeem Rewards</Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-8">
+              
+              {/* --- NEW "YOUR PROGRESS" CARD --- */}
+              <Card className="shadow-eco">
+                <CardHeader><CardTitle className="text-2xl text-forest">Your Progress</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-6 text-center mb-6">
+                    <div>
+                      <div className="text-3xl font-bold text-amber-500">{userPoints.toLocaleString()}</div>
+                      <div className="text-sm text-muted-foreground">Total Points</div>
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold text-forest">{currentLevel.name}</div>
+                      <div className="text-sm text-muted-foreground">Current Badge</div>
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold text-blue-500">#{userRank || 'N/A'}</div>
+                      <div className="text-sm text-muted-foreground">Global Rank</div>
+                    </div>
+                  </div>
+                  {nextLevel && (
+                    <div className="mt-6">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium">Progress to {nextLevel.name}</span>
+                        <span className="text-sm text-muted-foreground">{userPoints.toLocaleString()} / {nextLevel.points.toLocaleString()}</span>
+                      </div>
+                      <Progress value={progressToNextLevel} className="h-3" />
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {(nextLevel.points - userPoints).toLocaleString()} points to the next badge!
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* --- Your Achievements Card (Simplified) --- */}
+              <Card className="shadow-eco">
+                <CardHeader><CardTitle className="text-xl text-forest">Your Badges</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-4 text-center">
+                    {levels.map((level) => (
+                      <div key={level.name} className="flex flex-col items-center">
+                        <div className={`p-3 rounded-full ${userPoints >= level.points ? 'bg-amber-100' : 'bg-muted grayscale opacity-60'}`}>
+                           {level.icon}
+                        </div>
+                        <p className={`text-xs mt-2 ${userPoints >= level.points ? 'font-semibold text-forest' : 'text-muted-foreground'}`}>{level.name}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            
+            {/* --- LEADERBOARD CARD --- */}
+            <div className="space-y-6">
+              <Card className="shadow-eco">
+                <CardHeader>
+                  <CardTitle className="text-xl text-forest">Leaderboard</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {leaderboard.map((player, index) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                           <span className="font-bold text-muted-foreground w-6">{["🏆", "🥈", "🥉"][index] || `${index + 1}.`}</span>
+                           <p className={`font-medium ${player.full_name === profile.full_name ? 'text-forest' : ''}`}>{player.full_name}</p>
+                        </div>
+                        <Badge variant="secondary">{player.points.toLocaleString()} pts</Badge>
+                      </div>
+                    ))}
+                  </div>
+                  <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full mt-6" 
+                      onClick={fetchFullLeaderboard}
+                    >
+                      View Full Leaderboard
+                  </Button>
+
+                </CardContent>
+              </Card>
             </div>
           </div>
       </div>
       <Footer />
     </div>
+      <LeaderboardModal 
+        isOpen={isLeaderboardModalOpen}
+        onClose={() => setIsLeaderboardModalOpen(false)}
+        users={fullLeaderboard}
+        loading={leaderboardLoading}
+        currentUser_id={user?.id}
+      />
+    </>
   );
 };
 

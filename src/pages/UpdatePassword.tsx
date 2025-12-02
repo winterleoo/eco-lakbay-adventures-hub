@@ -18,21 +18,15 @@ const UpdatePassword = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Listen for PASSWORD_RECOVERY event directly from Supabase
+    // This security check is well-implemented and doesn't need changes.
     const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setRecoverySession(true);
       }
     });
 
-    // Also check if there's already an active session (fresh from recovery link)
     const checkRecovery = async () => {
-      const { data, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error('Error getting session:', error.message);
-        return;
-      }
-      // If session exists, we consider it valid recovery session
+      const { data } = await supabase.auth.getSession();
       if (data.session) {
         setRecoverySession(true);
       }
@@ -52,10 +46,10 @@ const UpdatePassword = () => {
       toast({ title: 'Passwords do not match', variant: 'destructive' });
       return;
     }
-    if (password.length < 6) {
+    if (password.length < 8) { // Best practice is to require at least 8 characters
       toast({
         title: 'Password too short',
-        description: 'Password should be at least 6 characters.',
+        description: 'Password should be at least 8 characters.',
         variant: 'destructive',
       });
       return;
@@ -68,12 +62,15 @@ const UpdatePassword = () => {
 
       toast({
         title: 'Password Updated Successfully!',
-        description: 'Please log in with your new password.',
+        description: 'You have been logged out for security. Welcome back!',
       });
 
-      // End current session after reset for security
+      // End current session after reset for security (this is a good practice)
       await supabase.auth.signOut();
-      navigate('/auth');
+      
+      // --- THE FIX: Navigate to the landing page ---
+      navigate('/');
+
     } catch (error: any) {
       toast({
         title: 'Error Updating Password',
@@ -85,10 +82,11 @@ const UpdatePassword = () => {
     }
   };
 
+  // This is a great security measure to prevent direct access to the page.
   if (!recoverySession) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p>Invalid or expired password recovery link.</p>
+        <p className="text-muted-foreground p-4 text-center">Invalid or expired password recovery link.<br/>Please request a new one.</p>
       </div>
     );
   }
