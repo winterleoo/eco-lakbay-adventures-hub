@@ -14,6 +14,11 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+const renderer = new marked.Renderer();
+renderer.link = (href, title, text) => {
+  return `<a target="_blank" rel="noopener noreferrer" href="${href}" title="${title || ''}">${text}</a>`;
+};
+
 const Chatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
