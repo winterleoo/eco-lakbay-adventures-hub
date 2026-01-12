@@ -74,7 +74,7 @@ const Chatbot = () => {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('your-chat-function', {
+      const { data, error } = await supabase.functions.invoke('chat', {
         body: {
           message: inputMessage,
           history: messages.slice(-10).map(msg => ({
