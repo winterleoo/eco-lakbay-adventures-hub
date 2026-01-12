@@ -14,10 +14,29 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+// --- FIXED RENDERER ---
 const renderer = new marked.Renderer();
-renderer.link = (href, title, text) => {
-  return `<a target="_blank" rel="noopener noreferrer" href="${href}" title="${title || ''}">${text}</a>`;
+
+// Update to handle the object-based argument in newer marked versions
+renderer.link = (args: any) => {
+  let href = args.href;
+  let title = args.title;
+  let text = args.text;
+
+  // Fallback for older signatures or if args is passed differently
+  if (typeof args === 'string') {
+     href = args;
+     // @ts-ignore
+     title = arguments[1];
+     // @ts-ignore
+     text = arguments[2];
+  }
+
+  return `<a target="_blank" rel="noopener noreferrer" href="${href}" title="${title || ''}" class="text-blue-500 underline hover:text-blue-700">${text}</a>`;
 };
+
+// Configure marked globally
+marked.use({ renderer });
 
 const Chatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -55,7 +74,7 @@ const Chatbot = () => {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('chat', {
+      const { data, error } = await supabase.functions.invoke('your-chat-function', {
         body: {
           message: inputMessage,
           history: messages.slice(-10).map(msg => ({
@@ -105,7 +124,6 @@ const Chatbot = () => {
         </Button>
       ) : (
         <Card className="w-80 h-96 flex flex-col shadow-hover">
-          {/* Header */}
           <div className="flex items-center justify-between p-4 border-b bg-gradient-hero text-white rounded-t-lg">
             <div className="flex items-center space-x-2">
               <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
@@ -123,7 +141,6 @@ const Chatbot = () => {
             </Button>
           </div>
 
-          {/* Messages */}
           <ScrollArea className="flex-1 p-4">
             <div className="space-y-4">
               {messages.map((message, index) => (
@@ -132,23 +149,21 @@ const Chatbot = () => {
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[80%] p-3 rounded-lg ${
+                    className={`max-w-[85%] p-3 rounded-lg ${
                       message.role === 'user'
                         ? 'bg-gradient-hero text-white'
                         : 'bg-muted text-foreground'
                     }`}
                   >
-                   <div 
+                    <div 
                       className={`text-sm break-words ${
                         message.role === 'user' 
                           ? '[&_a]:text-white [&_a]:underline [&_a]:font-bold' 
                           : '[&_a]:text-blue-600 [&_a]:underline [&_a]:font-medium [&_a:hover]:text-blue-800'
                       }`}
+                      // --- MODIFIED: Use marked.parse() ---
                       dangerouslySetInnerHTML={{ 
-                          // depending on your exact version of marked, it's either 
-                          // marked(..., { renderer }) or marked.parse(..., { renderer })
-                          // marked(...) is the most compatible way for recent versions
-                          __html: marked(message.content, { renderer }) as string 
+                          __html: marked.parse(message.content) as string 
                       }} 
                     />
                     
@@ -173,7 +188,6 @@ const Chatbot = () => {
             </div>
           </ScrollArea>
 
-          {/* Input */}
           <div className="p-4 border-t">
             <div className="flex space-x-2">
               <Input
