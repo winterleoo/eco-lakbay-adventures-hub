@@ -136,10 +136,15 @@ const Chatbot = () => {
                    <div 
                       className={`text-sm break-words ${
                         message.role === 'user' 
-                          ? '[&_a]:text-white [&_a]:underline [&_a]:font-bold' // Styles for user bubble
-                          : '[&_a]:text-blue-600 [&_a]:underline [&_a]:font-medium [&_a:hover]:text-blue-800' // Styles for assistant bubble
+                          ? '[&_a]:text-white [&_a]:underline [&_a]:font-bold' 
+                          : '[&_a]:text-blue-600 [&_a]:underline [&_a]:font-medium [&_a:hover]:text-blue-800'
                       }`}
-                      dangerouslySetInnerHTML={{ __html: marked(message.content) as string }} 
+                      dangerouslySetInnerHTML={{ 
+                          // depending on your exact version of marked, it's either 
+                          // marked(..., { renderer }) or marked.parse(..., { renderer })
+                          // marked(...) is the most compatible way for recent versions
+                          __html: marked(message.content, { renderer }) as string 
+                      }} 
                     />
                     
                     <p className="text-xs opacity-70 mt-1">
