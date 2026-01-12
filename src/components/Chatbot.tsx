@@ -1,217 +1,223 @@
-import { useState, useRef, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { MessageCircle, X, Send } from "lucide-react";
-import { marked } from 'marked';
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-}
+// Read both API keys from your project's environment secrets
+const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+const googleMapsApiKey = Deno.env.get('GOOGLE_MAPS_API_KEY');
 
-// --- FIXED RENDERER ---
-const renderer = new marked.Renderer();
+// Define your CORS headers and allowed origins for security
+const allowedOrigins = [
+  'https://www.eco-lakbay.com',
+  'https://eco-lakbay.com',
+  'https://eco-lakbay-adventures-hub.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
 
-// Update to handle the object-based argument in newer marked versions
-renderer.link = (args: any) => {
-  let href = args.href;
-  let title = args.title;
-  let text = args.text;
+// --- HELPER FUNCTION: To make calls to the Gemini API ---
+async function callGemini(contents: any[], tools: any[] | undefined, systemPrompt?: string) {
+  if (!geminiApiKey) throw new Error("Missing GEMINI_API_KEY secret.");
 
-  // Fallback for older signatures or if args is passed differently
-  if (typeof args === 'string') {
-     href = args;
-     // @ts-ignore
-     title = arguments[1];
-     // @ts-ignore
-     text = arguments[2];
+  const body: any = {
+    contents,
+    tools
+  };
+  
+  // Add system instruction if provided
+  if (systemPrompt) {
+    body.systemInstruction = {
+      parts: [{ text: systemPrompt }]
+    };
   }
 
-  return `<a target="_blank" rel="noopener noreferrer" href="${href}" title="${title || ''}" class="text-blue-500 underline hover:text-blue-700">${text}</a>`;
-};
+  // --- FIX: Use a valid model name (gemini-1.5-flash) ---
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
 
-// Configure marked globally
-marked.use({ renderer });
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Gemini API Error: ${response.status} - ${errorBody}`);
+  }
+  return response.json();
+}
 
-const Chatbot = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: 'assistant',
-      content: 'Hello! I\'m your EcoLakbay assistant. I can help you with sustainable tourism in Pampanga, trip planning, and eco-friendly travel tips. How can I assist you today?',
-      timestamp: new Date()
-    }
-  ]);
-  const [inputMessage, setInputMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
+// --- HELPER FUNCTION: To get real location data from Google Geocoding API ---
+async function geocodeLocation(locationQuery: string) {
+  if (!googleMapsApiKey) throw new Error("Missing GOOGLE_MAPS_API_KEY secret.");
+  
+  // Force search within Pampanga, Philippines
+  const refinedQuery = `${locationQuery}, Pampanga, Philippines`;
+  
+  const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(refinedQuery)}&key=${googleMapsApiKey}&region=ph`;
+  const response = await fetch(geocodeUrl);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  if (!response.ok) {
+    console.error("Geocoding API failed for query:", locationQuery);
+    return null;
+  }
+
+  const data = await response.json();
+  if (data.results && data.results.length > 0) {
+    return {
+      formattedAddress: data.results[0].formatted_address,
+      location: data.results[0].geometry.location
+    };
+  }
+  return null;
+}
+
+// --- MAIN SERVER LOGIC ---
+serve(async (req) => {
+  const origin = req.headers.get('Origin') || '';
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS'
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
 
-  const sendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return;
+  try {
+    const { message, history = [] } = await req.json();
 
-    const userMessage: ChatMessage = {
-      role: 'user',
-      content: inputMessage,
-      timestamp: new Date()
-    };
+    // The primary system prompt with STRICT BOUNDARIES
+    const systemPrompt = `
+      ---
+      ROLE & PERSONA:
+      You are a specialized assistant for EcoLakbay, a sustainable tourism platform. Your ONLY purpose is to discuss and promote sustainable travel within the province of Pampanga, Philippines. You are friendly, positive, and an expert on Pampanga's eco-tourism.
 
-    setMessages(prev => [...prev, userMessage]);
-    setInputMessage('');
-    setIsLoading(true);
+      ---
+      STRICT BOUNDARIES (MANDATORY RULES):
+      1.  **SCOPE:** You MUST ONLY answer questions related to Pampanga, sustainable tourism, eco-friendly activities, and the EcoLakbay platform.
+      2.  **REFUSAL:** If a user asks a question outside this scope (e.g., about other provinces like Baguio/Cebu, general knowledge, math, coding, or off-topic chat), you MUST politely refuse. A good refusal is: "I'm an expert on sustainable travel in Pampanga! I can't help with that, but I'd be happy to tell you about a beautiful eco-park or a local farm in the area." Do NOT apologize for your limitations.
+      3.  **GEOGRAPHIC CONSTRAINT:** ALL of your recommendations for destinations, food, or activities MUST be located within Pampanga. If a user asks about a place outside Pampanga, gently redirect them back to a similar experience within Pampanga.
 
-    try {
-      const { data, error } = await supabase.functions.invoke('chat', {
-        body: {
-          message: inputMessage,
-          history: messages.slice(-10).map(msg => ({
-            role: msg.role,
-            content: msg.content
-          }))
+      ---
+      TOOL USAGE RULE:
+      When a user asks for a specific location, directions, or "where is" a place *within Pampanga*, you MUST use the "get_location_info" function to get the real, factual address. DO NOT invent addresses.
+    `;
+
+    // Prepare history
+    const initialContents = [
+      ...history.map((m: any) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }]
+        })),
+      {
+        role: 'user',
+        parts: [{ text: message }]
+      }
+    ];
+
+    // Define tools
+    const tools = [
+      {
+        functionDeclarations: [
+          {
+            name: "get_location_info",
+            description: "Get factual information, including the address and coordinates, for a specific place. Use this whenever a user asks about a location.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                place_name: { type: "STRING" }
+              },
+              required: ["place_name"]
+            }
+          }
+        ]
+      }
+    ];
+
+    // STEP 1: First call to Gemini
+    const initialGeminiResponse = await callGemini(initialContents, tools, systemPrompt);
+    const candidate = initialGeminiResponse.candidates?.[0];
+    
+    if (!candidate || !candidate.content) {
+      throw new Error("Gemini returned an invalid initial response.");
+    }
+
+    const firstPart = candidate.content.parts[0];
+    let finalReply;
+
+    // STEP 2: Check if Gemini decided to use our tool
+    if (firstPart.functionCall && firstPart.functionCall.name === 'get_location_info') {
+      const placeName = firstPart.functionCall.args.place_name;
+      
+      // Execute the tool
+      const locationData = await geocodeLocation(placeName);
+      
+      // Prepare the tool's result
+      const functionResponsePart = {
+        functionResponse: {
+          name: "get_location_info",
+          response: locationData ? {
+            name: placeName,
+            address: locationData.formattedAddress,
+            lat: locationData.location.lat,
+            lng: locationData.location.lng
+          } : {
+            name: placeName,
+            error: "Location not found by the mapping service."
+          }
         }
-      });
-
-      if (error) throw error;
-
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: data.reply,
-        timestamp: new Date()
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error('Chat error:', error);
-      toast({
-        title: "Error",
-        description: "Failed to send message. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
+      // Construct history for second call
+      const finalContents = [
+        ...initialContents,
+        candidate.content,
+        {
+          role: "tool",
+          parts: [functionResponsePart]
+        }
+      ];
+
+      // A simpler prompt for the second call
+      const groundingPrompt = `You are a helpful assistant. A user asked about a location, and you have received factual data from a tool. Formulate a friendly, conversational response for the user based *only* on this data. Directly state the address you received from the tool.`;
+
+      // STEP 3: Second call to Gemini
+      const groundedGeminiResponse = await callGemini(finalContents, undefined, groundingPrompt);
+      finalReply = groundedGeminiResponse.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      // Add Google Maps link
+      if (locationData) {
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${locationData.location.lat},${locationData.location.lng}`;
+        finalReply += `\n\n[View on Google Maps](${mapsUrl})`;
+      }
+    } else {
+      // No tool used
+      finalReply = firstPart.text;
     }
-  };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
+    if (!finalReply) {
+      throw new Error("Failed to generate a final response from the AI.");
     }
-  };
 
-  return (
-    <div className="fixed bottom-6 right-6 z-50">
-      {!isOpen ? (
-        <Button
-          onClick={() => setIsOpen(true)}
-          size="lg"
-          className="rounded-full w-14 h-14 bg-gradient-hero hover:bg-gradient-accent shadow-eco"
-        >
-          <MessageCircle className="w-6 h-6" />
-        </Button>
-      ) : (
-        <Card className="w-80 h-96 flex flex-col shadow-hover">
-          <div className="flex items-center justify-between p-4 border-b bg-gradient-hero text-white rounded-t-lg">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-                <span className="text-sm font-bold">E</span>
-              </div>
-              <span className="font-semibold">EcoLakbay Assistant</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsOpen(false)}
-              className="text-white hover:bg-white/20"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
+    return new Response(JSON.stringify({
+      reply: finalReply
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
+    });
 
-          <ScrollArea className="flex-1 p-4">
-            <div className="space-y-4">
-              {messages.map((message, index) => (
-                <div
-                  key={index}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[85%] p-3 rounded-lg ${
-                      message.role === 'user'
-                        ? 'bg-gradient-hero text-white'
-                        : 'bg-muted text-foreground'
-                    }`}
-                  >
-                    <div 
-                      className={`text-sm break-words ${
-                        message.role === 'user' 
-                          ? '[&_a]:text-white [&_a]:underline [&_a]:font-bold' 
-                          : '[&_a]:text-blue-600 [&_a]:underline [&_a]:font-medium [&_a:hover]:text-blue-800'
-                      }`}
-                      // --- MODIFIED: Use marked.parse() ---
-                      dangerouslySetInnerHTML={{ 
-                          __html: marked.parse(message.content) as string 
-                      }} 
-                    />
-                    
-                    <p className="text-xs opacity-70 mt-1">
-                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-muted p-3 rounded-lg">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-forest rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-forest rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-forest rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-          </ScrollArea>
-
-          <div className="p-4 border-t">
-            <div className="flex space-x-2">
-              <Input
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Type your message..."
-                className="flex-1"
-                disabled={isLoading}
-              />
-              <Button
-                onClick={sendMessage}
-                disabled={!inputMessage.trim() || isLoading}
-                size="sm"
-                className="bg-gradient-hero hover:bg-gradient-accent"
-              >
-                <Send className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        </Card>
-      )}
-    </div>
-  );
-};
-
-export default Chatbot;
+  } catch (error: any) {
+    console.error('Error in chat function:', error.message);
+    return new Response(JSON.stringify({
+      error: error.message
+    }), {
+      status: 500,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
+    });
+  }
+});
