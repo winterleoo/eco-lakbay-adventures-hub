@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { MessageCircle, X, Send } from "lucide-react";
+import { marked } from 'marked';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -132,7 +133,15 @@ const Chatbot = () => {
                         : 'bg-muted text-foreground'
                     }`}
                   >
-                    <p className="text-sm">{message.content}</p>
+                   <div 
+                      className={`text-sm break-words ${
+                        message.role === 'user' 
+                          ? '[&_a]:text-white [&_a]:underline [&_a]:font-bold' // Styles for user bubble
+                          : '[&_a]:text-blue-600 [&_a]:underline [&_a]:font-medium [&_a:hover]:text-blue-800' // Styles for assistant bubble
+                      }`}
+                      dangerouslySetInnerHTML={{ __html: marked(message.content) as string }} 
+                    />
+                    
                     <p className="text-xs opacity-70 mt-1">
                       {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
